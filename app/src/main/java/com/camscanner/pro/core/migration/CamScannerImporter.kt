@@ -162,6 +162,44 @@ object CamScannerImporter {
     }
 
     /**
+     * Appends multiple fetched images to an existing document.
+     */
+    suspend fun appendImagesToDocument(
+        context: Context,
+        documentId: Long,
+        imageUris: List<Uri>
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        val repository = CamScannerApp.instance.repository
+        try {
+            var addedCount = 0
+            for (uri in imageUris) {
+                val tempFile = FileManager.createTempImageFile(context)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                val bitmap = FileManager.loadSampledBitmap(tempFile.absolutePath, 1920) ?: continue
+                val finalFile = FileManager.saveBitmap(context, bitmap, "IMPORTED")
+                val ocrText = OcrManager.recognizeText(bitmap).getOrNull()
+                bitmap.recycle()
+
+                repository.addPageToDocument(
+                    documentId = documentId,
+                    processedImagePath = finalFile.absolutePath,
+                    originalImagePath = finalFile.absolutePath,
+                    filterType = "ORIGINAL",
+                    ocrText = ocrText
+                )
+                addedCount++
+            }
+            Result.success(addedCount)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Scans a directory picked via Storage Access Framework for CamScanner files.
      */
     suspend fun importFromFolder(

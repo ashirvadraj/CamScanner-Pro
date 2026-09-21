@@ -63,6 +63,11 @@
                 <com.google.android.material.tabs.TabItem
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:text="📉 Compress PDF" />
+
+                <com.google.android.material.tabs.TabItem
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:text="🖼️ Compress Image" />
 
             </com.google.android.material.tabs.TabLayout>
@@ -347,7 +352,333 @@
 
         </ScrollView>
 
-        <!-- ==================== SECTION 2: COMPRESS IMAGE ==================== -->
+        <!-- ==================== SECTION 2: COMPRESS PDF ==================== -->
+        <ScrollView
+            android:id="@+id/scrollCompressPdf"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- PDF Pick Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp"
+                    app:strokeColor="#1A000000"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="Select PDF to Compress"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp" />
+
+                        <LinearLayout
+                            android:id="@+id/layoutPdfPreviewContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
+
+                            <ImageView
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:background="@drawable/bg_search_bar"
+                                android:padding="10dp"
+                                android:src="@drawable/ic_pdf"
+                                app:tint="@color/primary" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/tvPickedPdfName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:maxLines="1"
+                                    android:text="Document.pdf"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="14sp" />
+
+                                <TextView
+                                    android:id="@+id/tvPickedPdfSize"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Original Size: 4,200 KB (4.1 MB)"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="12sp" />
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSelectPdfToCompress"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="12dp"
+                            android:text="Choose PDF File"
+                            android:textColor="@color/primary"
+                            app:cornerRadius="12dp"
+                            app:icon="@drawable/ic_pdf"
+                            app:iconTint="@color/primary"
+                            app:strokeColor="@color/primary" />
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Target PDF Size Limit Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp"
+                    app:strokeColor="#1A000000"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="Target PDF File Size"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Smart compression preserves high-DPI text and clean graphics."
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <!-- Preset Chips -->
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/chipGroupPdfCompressSize"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipPdfComp100Kb"
+                                style="@style/Widget.Material3.Chip.Filter"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="100 KB" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipPdfComp300Kb"
+                                style="@style/Widget.Material3.Chip.Filter"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="300 KB" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipPdfComp500Kb"
+                                style="@style/Widget.Material3.Chip.Filter"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                android:text="500 KB" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipPdfComp1Mb"
+                                style="@style/Widget.Material3.Chip.Filter"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="1 MB" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipPdfComp2Mb"
+                                style="@style/Widget.Material3.Chip.Filter"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="2 MB" />
+
+                        </com.google.android.material.chip.ChipGroup>
+
+                        <!-- Custom Target Size Input -->
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:hint="Exact Target Size (KB)"
+                            app:boxCornerRadiusBottomEnd="12dp"
+                            app:boxCornerRadiusBottomStart="12dp"
+                            app:boxCornerRadiusTopEnd="12dp"
+                            app:boxCornerRadiusTopStart="12dp"
+                            app:suffixText="KB">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etPdfCompressTargetKb"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="number"
+                                android:maxLines="1"
+                                android:text="500" />
+
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <!-- Output Title Input -->
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:hint="Compressed File Name"
+                            app:boxCornerRadiusBottomEnd="12dp"
+                            app:boxCornerRadiusBottomStart="12dp"
+                            app:boxCornerRadiusTopEnd="12dp"
+                            app:boxCornerRadiusTopStart="12dp">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etPdfCompressTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="text"
+                                android:maxLines="1"
+                                android:text="Compressed_Document" />
+
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Compress Action Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnExecutePdfCompress"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="20dp"
+                    android:backgroundTint="@color/primary"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Compress PDF to Target Size"
+                    android:textColor="@color/white"
+                    android:textSize="15sp"
+                    app:cornerRadius="16dp" />
+
+                <!-- PDF Compression Result Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardPdfCompressResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="#E8F5E9"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="2dp"
+                    app:strokeColor="#4CAF50"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-black"
+                            android:text="🎉 PDF Compression Complete!"
+                            android:textColor="#2E7D32"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/tvPdfCompressBeforeAfter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="Original: 4.2 MB  ➜  Compressed: 485 KB (-88%)"
+                            android:textColor="#1B5E20"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/tvPdfCompressDetails"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Target: 500 KB • 6 Pages"
+                            android:textColor="#388E3C"
+                            android:textSize="12sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnOpenCompressedPdf"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="6dp"
+                                android:layout_weight="1"
+                                android:text="Open PDF"
+                                app:cornerRadius="12dp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnShareCompressedPdf"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="6dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="@color/primary"
+                                android:text="Share PDF"
+                                android:textColor="@color/white"
+                                app:cornerRadius="12dp"
+                                app:icon="@drawable/ic_share" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+            </LinearLayout>
+
+        </ScrollView>
+
+        <!-- ==================== SECTION 3: COMPRESS IMAGE ==================== -->
         <ScrollView
             android:id="@+id/scrollCompressImage"
             android:layout_width="match_parent"

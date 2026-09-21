@@ -115,52 +115,79 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
+                        android:orientation="vertical"
                         android:visibility="gone"
                         tools:visibility="visible">
 
-                        <ImageView
-                            android:id="@+id/ivUserAvatar"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:contentDescription="@null"
-                            android:src="@drawable/ic_check"
-                            app:tint="@color/primary" />
-
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                            <TextView
-                                android:id="@+id/tvUserName"
+                            <ImageView
+                                android:id="@+id/ivUserAvatar"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_check"
+                                app:tint="@color/primary" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/tvUserName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="sans-serif-bold"
+                                    android:textColor="@color/text_primary"
+                                    android:textSize="15sp"
+                                    tools:text="Ashirvad Raj" />
+
+                                <TextView
+                                    android:id="@+id/tvUserEmail"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="13sp"
+                                    tools:text="ashirvadraj415@gmail.com" />
+
+                            </LinearLayout>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSignOut"
+                                style="@style/Widget.Material3.Button.TextButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:fontFamily="sans-serif-medium"
-                                android:textColor="@color/text_primary"
-                                android:textSize="15sp"
-                                tools:text="Ashirvad Raj" />
-
-                            <TextView
-                                android:id="@+id/tvUserEmail"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="13sp"
-                                tools:text="ashirvadraj415@gmail.com" />
+                                android:text="Sign Out"
+                                android:textColor="@color/red" />
 
                         </LinearLayout>
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnSignOut"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="wrap_content"
+                        <!-- Account Backup Verification Banner -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Sign Out"
-                            android:textColor="@color/red" />
+                            android:layout_marginTop="10dp"
+                            android:background="@drawable/bg_search_bar"
+                            android:orientation="vertical"
+                            android:padding="10dp">
+
+                            <TextView
+                                android:id="@+id/tvBackupAccountStatus"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="✅ Backups linked to this Gmail account. Restore anytime on another device."
+                                android:textColor="#2E7D32"
+                                android:textSize="12sp" />
+
+                        </LinearLayout>
 
                     </LinearLayout>
 

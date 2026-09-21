@@ -17,6 +17,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.camscanner.pro.CamScannerApp
 import com.camscanner.pro.R
+import com.camscanner.pro.core.auth.GoogleAuthManager
+import com.camscanner.pro.core.backup.CloudBackupManager
 import com.camscanner.pro.core.migration.CamScannerImporter
 import com.camscanner.pro.core.pdf.PdfGenerator
 import com.camscanner.pro.core.storage.FileManager
@@ -57,9 +59,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val galleryLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { handleGalleryImage(it) }
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            handlePickedImages(uris)
+        }
     }
 
     private val pdfPickerLauncher = registerForActivityResult(
@@ -90,6 +94,12 @@ class MainActivity : AppCompatActivity() {
         setupRecyclerView()
         setupListeners()
         applyFilters()
+        updateAccountBanner()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateAccountBanner()
     }
 
     private fun setupRecyclerView() {
@@ -130,6 +140,31 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnMergeCompress.setOnClickListener {
             startActivity(Intent(this, MergeCompressActivity::class.java))
+        }
+
+        binding.cardQuickCompressImage.setOnClickListener {
+            val intent = Intent(this, MergeCompressActivity::class.java).apply {
+                putExtra(MergeCompressActivity.EXTRA_INITIAL_TAB, MergeCompressActivity.TAB_COMPRESS_IMAGE)
+            }
+            startActivity(intent)
+        }
+
+        binding.cardQuickCompressPdf.setOnClickListener {
+            val intent = Intent(this, MergeCompressActivity::class.java).apply {
+                putExtra(MergeCompressActivity.EXTRA_INITIAL_TAB, MergeCompressActivity.TAB_COMPRESS_PDF)
+            }
+            startActivity(intent)
+        }
+
+        binding.cardQuickMergePdf.setOnClickListener {
+            val intent = Intent(this, MergeCompressActivity::class.java).apply {
+                putExtra(MergeCompressActivity.EXTRA_INITIAL_TAB, MergeCompressActivity.TAB_MERGE_PDF)
+            }
+            startActivity(intent)
+        }
+
+        binding.cardQuickMultiImageScan.setOnClickListener {
+            galleryLauncher.launch("image/*")
         }
 
         binding.swipeRefresh.setOnRefreshListener {
@@ -190,6 +225,66 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    private fun handlePickedImages(uris: List<Uri>) {
+        if (uris.size == 1) {
+            handleGalleryImage(uris.first())
+        } else {
+            val options = arrayOf(
+                "⚡ Fetch as Multi-Page Document (${uris.size} pages)",
+                "✂️ Review & Crop Pages in Batch"
+            )
+            AlertDialog.Builder(this)
+                .setTitle("Selected ${uris.size} Images")
+                .setItems(options) { _, which ->
+                    when (which) {
+                        0 -> importBatchImages(uris)
+                        1 -> startBatchCrop(uris)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    private fun startBatchCrop(uris: List<Uri>) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Preparing Batch Crop")
+            .setMessage("Loading ${uris.size} images...")
+            .setCancelable(false)
+            .show()
+
+        lifecycleScope.launch {
+            try {
+                val tempFiles = withContext(Dispatchers.IO) {
+                    uris.map { uri ->
+                        val tempFile = FileManager.createTempImageFile(this@MainActivity)
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            FileOutputStream(tempFile).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        tempFile.absolutePath
+                    }
+                }
+                progress.dismiss()
+
+                if (tempFiles.isNotEmpty()) {
+                    val first = tempFiles.first()
+                    val remaining = ArrayList(tempFiles.drop(1))
+                    val intent = Intent(this@MainActivity, CropActivity::class.java).apply {
+                        putExtra("IMAGE_PATH", first)
+                        putExtra("IS_BATCH", true)
+                        putStringArrayListExtra("BATCH_REMAINING", remaining)
+                    }
+                    startActivity(intent)
+                }
+            } catch (e: Exception) {
+                progress.dismiss()
+                Toast.makeText(this@MainActivity, "Failed to load images: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun handleGalleryImage(uri: Uri) {
         try {
             val tempFile = FileManager.createTempImageFile(this)
@@ -211,18 +306,58 @@ class MainActivity : AppCompatActivity() {
     private fun showDocumentMenu(view: View, doc: DocumentEntity) {
         val popup = PopupMenu(this, view)
         popup.menu.add(0, 1, 0, "Export as PDF")
-        popup.menu.add(0, 2, 1, "Assign Category")
-        popup.menu.add(0, 3, 2, "Delete Document")
+        popup.menu.add(0, 2, 1, "📉 Compress to Target Size")
+        popup.menu.add(0, 3, 2, "Assign Category")
+        popup.menu.add(0, 4, 3, "Delete Document")
 
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> exportPdf(doc)
-                2 -> showCategoryDialog(doc)
-                3 -> confirmDelete(doc)
+                2 -> openCompressForDocument(doc)
+                3 -> showCategoryDialog(doc)
+                4 -> confirmDelete(doc)
             }
             true
         }
         popup.show()
+    }
+
+    private fun openCompressForDocument(doc: DocumentEntity) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Preparing PDF")
+            .setMessage("Exporting document pages to PDF...")
+            .setCancelable(false)
+            .show()
+
+        lifecycleScope.launch {
+            try {
+                val db = com.camscanner.pro.data.local.AppDatabase.getInstance(this@MainActivity)
+                val pages = db.pageDao().getPagesForDocument(doc.id)
+                if (pages.isEmpty()) {
+                    progress.dismiss()
+                    Toast.makeText(this@MainActivity, "No pages to compress", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val imagePaths = pages.map { it.imagePath }
+                val options = com.camscanner.pro.core.pdf.PdfOptions(
+                    pageSize = com.camscanner.pro.core.pdf.PageSize.A4,
+                    quality = com.camscanner.pro.core.pdf.PdfQuality.HIGH
+                )
+                withContext(Dispatchers.IO) {
+                    PdfGenerator.generatePdf(this@MainActivity, imagePaths, doc.title, options)
+                }
+                progress.dismiss()
+
+                val intent = Intent(this@MainActivity, MergeCompressActivity::class.java).apply {
+                    putExtra(MergeCompressActivity.EXTRA_INITIAL_TAB, MergeCompressActivity.TAB_COMPRESS_PDF)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                progress.dismiss()
+                Toast.makeText(this@MainActivity, "Failed to prepare PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun showCategoryDialog(doc: DocumentEntity) {
@@ -305,14 +440,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun showImportMenu(view: View) {
         val popup = PopupMenu(this, view)
-        popup.menu.add(0, 1, 0, "📄 Import CamScanner PDF")
-        popup.menu.add(0, 2, 1, "🖼️ Import Multiple Images")
+        popup.menu.add(0, 1, 0, "🖼️ Select Multiple Images & Fetch")
+        popup.menu.add(0, 2, 1, "📄 Import CamScanner PDF")
         popup.menu.add(0, 3, 2, "📁 Import CamScanner Folder")
 
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                1 -> pdfPickerLauncher.launch("application/pdf")
-                2 -> imageBatchPickerLauncher.launch("image/*")
+                1 -> galleryLauncher.launch("image/*")
+                2 -> pdfPickerLauncher.launch("application/pdf")
                 3 -> folderPickerLauncher.launch(null)
             }
             true
@@ -390,5 +525,49 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun updateAccountBanner() {
+        val user = GoogleAuthManager.getUserProfile(this)
+        val lastBackupTime = CloudBackupManager.getLastBackupTime(this)
+
+        if (user != null) {
+            val displayName = user.displayName ?: user.email ?: "Google Account"
+            binding.tvAccountName.text = "👤 $displayName"
+            if (lastBackupTime > 0) {
+                val timeStr = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(lastBackupTime))
+                binding.tvAccountBackupStatus.text = "✅ Backup Saved to Google ($timeStr)"
+                binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#2E7D32"))
+                binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_check)
+                binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#2E7D32"))
+                binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#E8F5E9"))
+                binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#81C784")
+                binding.btnAccountAction.text = "Manage"
+            } else {
+                binding.tvAccountBackupStatus.text = "⚠️ Signed In • No Cloud Backup Yet (Tap to Backup)"
+                binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#E65100"))
+                binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
+                binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#E65100"))
+                binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#FFF3E0"))
+                binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#FFB74D")
+                binding.btnAccountAction.text = "Backup Now"
+            }
+        } else {
+            binding.tvAccountName.text = "☁️ Google Cloud Backup"
+            binding.tvAccountBackupStatus.text = "Sign in with Gmail to secure & restore your scans"
+            binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#757575"))
+            binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
+            binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#00A86B"))
+            binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#F1F5F9"))
+            binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#E2E8F0")
+            binding.btnAccountAction.text = "Sign In"
+        }
+
+        binding.cardAccountBackupStatus.setOnClickListener {
+            startActivity(Intent(this, BackupActivity::class.java))
+        }
+        binding.btnAccountAction.setOnClickListener {
+            startActivity(Intent(this, BackupActivity::class.java))
+        }
     }
 }

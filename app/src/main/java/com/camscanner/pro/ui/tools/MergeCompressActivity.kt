@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.camscanner.pro.R
 import com.camscanner.pro.core.compression.SizeTargetCompressor
+import com.camscanner.pro.core.pdf.PdfCompressorEngine
 import com.camscanner.pro.core.pdf.PdfMergerEngine
 import com.camscanner.pro.core.storage.FileManager
 import com.camscanner.pro.databinding.ActivityMergeCompressBinding
@@ -28,6 +29,10 @@ class MergeCompressActivity : AppCompatActivity() {
     private val selectedPdfUris = mutableListOf<Uri>()
     private var lastMergedResult: PdfMergerEngine.MergeResult? = null
 
+    // PDF Compress State
+    private var selectedPdfToCompressUri: Uri? = null
+    private var lastCompressedPdfResult: PdfCompressorEngine.CompressResult? = null
+
     // Image Compress State
     private var selectedImageUri: Uri? = null
     private var lastCompressResult: SizeTargetCompressor.CompressionResult? = null
@@ -39,6 +44,15 @@ class MergeCompressActivity : AppCompatActivity() {
             selectedPdfUris.clear()
             selectedPdfUris.addAll(uris)
             updatePdfSelectionUI()
+        }
+    }
+
+    private val pdfToCompressPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedPdfToCompressUri = it
+            updatePdfToCompressUI(it)
         }
     }
 
@@ -58,6 +72,7 @@ class MergeCompressActivity : AppCompatActivity() {
 
         setupTabs()
         setupPdfMergeListeners()
+        setupPdfCompressListeners()
         setupImageCompressListeners()
     }
 
@@ -67,12 +82,19 @@ class MergeCompressActivity : AppCompatActivity() {
         binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 when (tab?.position) {
-                    0 -> {
+                    TAB_MERGE_PDF -> {
                         binding.scrollMergePdf.visibility = View.VISIBLE
+                        binding.scrollCompressPdf.visibility = View.GONE
                         binding.scrollCompressImage.visibility = View.GONE
                     }
-                    1 -> {
+                    TAB_COMPRESS_PDF -> {
                         binding.scrollMergePdf.visibility = View.GONE
+                        binding.scrollCompressPdf.visibility = View.VISIBLE
+                        binding.scrollCompressImage.visibility = View.GONE
+                    }
+                    TAB_COMPRESS_IMAGE -> {
+                        binding.scrollMergePdf.visibility = View.GONE
+                        binding.scrollCompressPdf.visibility = View.GONE
                         binding.scrollCompressImage.visibility = View.VISIBLE
                     }
                 }
@@ -80,6 +102,28 @@ class MergeCompressActivity : AppCompatActivity() {
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
+
+        val initialTab = intent.getIntExtra(EXTRA_INITIAL_TAB, TAB_MERGE_PDF)
+        if (initialTab in 0..2) {
+            binding.tabLayout.getTabAt(initialTab)?.select()
+            when (initialTab) {
+                TAB_MERGE_PDF -> {
+                    binding.scrollMergePdf.visibility = View.VISIBLE
+                    binding.scrollCompressPdf.visibility = View.GONE
+                    binding.scrollCompressImage.visibility = View.GONE
+                }
+                TAB_COMPRESS_PDF -> {
+                    binding.scrollMergePdf.visibility = View.GONE
+                    binding.scrollCompressPdf.visibility = View.VISIBLE
+                    binding.scrollCompressImage.visibility = View.GONE
+                }
+                TAB_COMPRESS_IMAGE -> {
+                    binding.scrollMergePdf.visibility = View.GONE
+                    binding.scrollCompressPdf.visibility = View.GONE
+                    binding.scrollCompressImage.visibility = View.VISIBLE
+                }
+            }
+        }
     }
 
     // ==========================================
@@ -184,7 +228,133 @@ class MergeCompressActivity : AppCompatActivity() {
     }
 
     // ==========================================
-    // SECTION 2: COMPRESS IMAGE TO EXACT TARGET SIZE
+    // SECTION 2: COMPRESS PDF TO TARGET SIZE
+    // ==========================================
+    private fun setupPdfCompressListeners() {
+        binding.btnSelectPdfToCompress.setOnClickListener {
+            pdfToCompressPickerLauncher.launch("application/pdf")
+        }
+
+        binding.chipGroupPdfCompressSize.setOnCheckedStateChangeListener { _, checkedIds ->
+            when (checkedIds.firstOrNull()) {
+                R.id.chipPdfComp100Kb -> binding.etPdfCompressTargetKb.setText("100")
+                R.id.chipPdfComp300Kb -> binding.etPdfCompressTargetKb.setText("300")
+                R.id.chipPdfComp500Kb -> binding.etPdfCompressTargetKb.setText("500")
+                R.id.chipPdfComp1Mb -> binding.etPdfCompressTargetKb.setText("1024")
+                R.id.chipPdfComp2Mb -> binding.etPdfCompressTargetKb.setText("2048")
+            }
+        }
+
+        binding.btnExecutePdfCompress.setOnClickListener {
+            val uri = selectedPdfToCompressUri
+            if (uri == null) {
+                Toast.makeText(this, "Please select a PDF document first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val targetKbStr = binding.etPdfCompressTargetKb.text?.toString()?.trim()
+            val targetKb = targetKbStr?.toIntOrNull() ?: 500
+            if (targetKb <= 0) {
+                Toast.makeText(this, "Please specify a positive target size in KB", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val title = binding.etPdfCompressTitle.text?.toString()?.trim()?.ifBlank { "Compressed_Document" }
+                ?: "Compressed_Document"
+
+            executePdfCompress(uri, targetKb, title)
+        }
+
+        binding.btnOpenCompressedPdf.setOnClickListener {
+            val result = lastCompressedPdfResult ?: return@setOnClickListener
+            val uri = FileManager.getUriForFile(this, result.outputFile)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/pdf")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "No PDF viewer app found", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnShareCompressedPdf.setOnClickListener {
+            val result = lastCompressedPdfResult ?: return@setOnClickListener
+            val uri = FileManager.getUriForFile(this, result.outputFile)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, result.outputFile.nameWithoutExtension)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(shareIntent, "Share Compressed PDF"))
+        }
+    }
+
+    private fun updatePdfToCompressUI(uri: Uri) {
+        binding.layoutPdfPreviewContainer.visibility = View.VISIBLE
+        var sizeKb = 0L
+        contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+            sizeKb = pfd.statSize / 1024
+        }
+
+        val sizeStr = if (sizeKb > 1024) {
+            String.format("%.2f MB", sizeKb / 1024.0)
+        } else {
+            "$sizeKb KB"
+        }
+
+        binding.tvPickedPdfName.text = "Selected PDF Document"
+        binding.tvPickedPdfSize.text = "Original Size: $sizeStr"
+        binding.btnSelectPdfToCompress.text = "Change PDF File"
+    }
+
+    private fun executePdfCompress(uri: Uri, targetKb: Int, title: String) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Compressing PDF")
+            .setMessage("Optimizing PDF pages and downscaling streams to fit inside $targetKb KB...")
+            .setCancelable(false)
+            .show()
+
+        lifecycleScope.launch {
+            val result = PdfCompressorEngine.compressPdf(
+                context = this@MergeCompressActivity,
+                pdfUri = uri,
+                targetSizeKb = targetKb,
+                outputTitle = title
+            )
+
+            progress.dismiss()
+
+            result.onSuccess { compRes ->
+                lastCompressedPdfResult = compRes
+                binding.cardPdfCompressResult.visibility = View.VISIBLE
+
+                val origStr = if (compRes.originalKb > 1024) {
+                    String.format("%.2f MB", compRes.originalKb / 1024.0)
+                } else {
+                    "${compRes.originalKb} KB"
+                }
+
+                val compStr = if (compRes.compressedKb > 1024) {
+                    String.format("%.2f MB", compRes.compressedKb / 1024.0)
+                } else {
+                    "${compRes.compressedKb} KB"
+                }
+
+                binding.tvPdfCompressBeforeAfter.text = "Original: $origStr  ➜  Compressed: $compStr (-${compRes.savingsPercent}%)"
+                binding.tvPdfCompressDetails.text = "Target: $targetKb KB • ${compRes.totalPages} Page(s) • Saved ${compRes.savingsPercent}% Space"
+
+                Toast.makeText(this@MergeCompressActivity, "PDF compressed to $compStr!", Toast.LENGTH_SHORT).show()
+            }.onFailure { err ->
+                Toast.makeText(this@MergeCompressActivity, "PDF compression failed: ${err.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // ==========================================
+    // SECTION 3: COMPRESS IMAGE TO EXACT TARGET SIZE
     // ==========================================
     private fun setupImageCompressListeners() {
         binding.btnSelectImage.setOnClickListener {
@@ -291,5 +461,12 @@ class MergeCompressActivity : AppCompatActivity() {
                 Toast.makeText(this@MergeCompressActivity, "Compression failed: ${err.message}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_INITIAL_TAB = "extra_initial_tab"
+        const val TAB_MERGE_PDF = 0
+        const val TAB_COMPRESS_PDF = 1
+        const val TAB_COMPRESS_IMAGE = 2
     }
 }

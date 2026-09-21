@@ -133,8 +133,15 @@ class BackupActivity : AppCompatActivity() {
         if (user != null) {
             binding.layoutSignedOut.visibility = View.GONE
             binding.layoutSignedIn.visibility = View.VISIBLE
-            binding.tvUserName.text = user.displayName
-            binding.tvUserEmail.text = user.email ?: "Signed in via Google"
+            binding.tvUserName.text = "Signed in as: ${user.displayName}"
+            binding.tvUserEmail.text = user.email ?: "Google Account"
+            val lastBackupTime = CloudBackupManager.getLastBackupTime(this)
+            if (lastBackupTime > 0) {
+                val dateStr = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()).format(Date(lastBackupTime))
+                binding.tvBackupAccountStatus.text = "✅ Backups linked to this Gmail account (${user.displayName}). Last synced: $dateStr. If you delete the app or switch phones, sign in to restore your scans."
+            } else {
+                binding.tvBackupAccountStatus.text = "⚠️ Account connected (${user.displayName}). Tap 'Create Cloud Backup Now' below to save your scans to Google."
+            }
         } else {
             binding.layoutSignedOut.visibility = View.VISIBLE
             binding.layoutSignedIn.visibility = View.GONE

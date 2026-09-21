@@ -75,6 +75,82 @@
 
             </LinearLayout>
 
+            <!-- Google Account & Cloud Backup Status Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardAccountBackupStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="#E8F5E9"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#81C784"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="9dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:id="@+id/ivAccountStatusIcon"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@drawable/bg_search_bar"
+                        android:padding="6dp"
+                        android:src="@drawable/ic_check"
+                        app:tint="#2E7D32" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvAccountName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-bold"
+                            android:text="Google Account"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/tvAccountBackupStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:text="✅ Backup Saved &amp; Synced to Google"
+                            android:textColor="#2E7D32"
+                            android:textSize="11sp" />
+
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAccountAction"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:text="Backup"
+                        android:textColor="@color/primary"
+                        android:textSize="11sp"
+                        app:cornerRadius="8dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Search Bar -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -107,6 +183,215 @@
                     android:textSize="14sp" />
 
             </LinearLayout>
+
+            <!-- Quick Studio & Tools Action Cards -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:clipToPadding="false"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <!-- Quick Tool 1: Compress Image (Target 50KB) -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardQuickCompressImage"
+                        android:layout_width="145dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="10dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        app:cardBackgroundColor="#E0F2F1"
+                        app:cardCornerRadius="14dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#8000A86B"
+                        app:strokeWidth="1dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="12dp">
+
+                            <ImageView
+                                android:layout_width="26dp"
+                                android:layout_height="26dp"
+                                android:src="@drawable/ic_compress"
+                                app:tint="@color/primary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="Compress Image"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="1 MB ➜ 50 KB"
+                                android:textColor="@color/primary"
+                                android:textSize="11sp" />
+
+                        </LinearLayout>
+
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <!-- Quick Tool 2: Compress PDF -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardQuickCompressPdf"
+                        android:layout_width="145dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="10dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        app:cardBackgroundColor="#EDE7F6"
+                        app:cardCornerRadius="14dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#80673AB7"
+                        app:strokeWidth="1dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="12dp">
+
+                            <ImageView
+                                android:layout_width="26dp"
+                                android:layout_height="26dp"
+                                android:src="@drawable/ic_pdf"
+                                app:tint="#673AB7" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="Compress PDF"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="Fit Target Size"
+                                android:textColor="#673AB7"
+                                android:textSize="11sp" />
+
+                        </LinearLayout>
+
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <!-- Quick Tool 3: Merge PDFs -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardQuickMergePdf"
+                        android:layout_width="145dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="10dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        app:cardBackgroundColor="#E3F2FD"
+                        app:cardCornerRadius="14dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#801976D2"
+                        app:strokeWidth="1dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="12dp">
+
+                            <ImageView
+                                android:layout_width="26dp"
+                                android:layout_height="26dp"
+                                android:src="@drawable/ic_pdf"
+                                app:tint="#1976D2" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="Merge PDFs"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="Combine &amp; Limit"
+                                android:textColor="#1976D2"
+                                android:textSize="11sp" />
+
+                        </LinearLayout>
+
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <!-- Quick Tool 4: Multi-Image Scan & Fetch -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardQuickMultiImageScan"
+                        android:layout_width="145dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="10dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        app:cardBackgroundColor="#FFF3E0"
+                        app:cardCornerRadius="14dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#80F57C00"
+                        app:strokeWidth="1dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="12dp">
+
+                            <ImageView
+                                android:layout_width="26dp"
+                                android:layout_height="26dp"
+                                android:src="@drawable/ic_gallery"
+                                app:tint="#F57C00" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="sans-serif-bold"
+                                android:text="Multi-Image Scan"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="Batch Pick &amp; Fetch"
+                                android:textColor="#F57C00"
+                                android:textSize="11sp" />
+
+                        </LinearLayout>
+
+                    </com.google.android.material.card.MaterialCardView>
+
+                </LinearLayout>
+
+            </HorizontalScrollView>
 
             <!-- Category Filter Chips -->
             <HorizontalScrollView

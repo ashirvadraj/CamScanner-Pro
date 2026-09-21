@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.camscanner.pro.CamScannerApp
 import com.camscanner.pro.R
+import com.camscanner.pro.core.migration.CamScannerImporter
 import com.camscanner.pro.core.pdf.PdfGenerator
 import com.camscanner.pro.core.storage.FileManager
 import com.camscanner.pro.data.local.entity.DocumentEntity
@@ -39,6 +40,14 @@ class DocumentDetailActivity : AppCompatActivity() {
     private var documentId: Long = -1L
     private var currentDoc: DocumentEntity? = null
     private var currentPages: List<PageEntity> = emptyList()
+
+    private val multiImagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            appendMultipleImages(uris)
+        }
+    }
 
     private val galleryLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -165,7 +174,11 @@ class DocumentDetailActivity : AppCompatActivity() {
     }
 
     private fun showAddPageOptions() {
-        val options = arrayOf("Take Photo with Camera", "Import from Gallery")
+        val options = arrayOf(
+            "📷 Take Photo with Camera",
+            "🖼️ Import Single Image (Crop & Scan)",
+            "📚 Select Multiple Images & Fetch (Batch Add)"
+        )
         AlertDialog.Builder(this)
             .setTitle(R.string.add_page)
             .setItems(options) { _, which ->
@@ -179,9 +192,36 @@ class DocumentDetailActivity : AppCompatActivity() {
                     1 -> {
                         galleryLauncher.launch("image/*")
                     }
+                    2 -> {
+                        multiImagePickerLauncher.launch("image/*")
+                    }
                 }
             }
+            .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun appendMultipleImages(uris: List<Uri>) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("Fetching Images")
+            .setMessage("Adding ${uris.size} pages to document...")
+            .setCancelable(false)
+            .show()
+
+        lifecycleScope.launch {
+            val result = CamScannerImporter.appendImagesToDocument(
+                context = this@DocumentDetailActivity,
+                documentId = documentId,
+                imageUris = uris
+            )
+            progress.dismiss()
+
+            result.onSuccess { count ->
+                Toast.makeText(this@DocumentDetailActivity, "Added $count pages to document!", Toast.LENGTH_SHORT).show()
+            }.onFailure { err ->
+                Toast.makeText(this@DocumentDetailActivity, "Failed to add pages: ${err.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun exportPdf() {
