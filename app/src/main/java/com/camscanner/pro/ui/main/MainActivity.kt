@@ -34,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -84,6 +85,45 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         uri?.let { importFolder(it) }
+    }
+
+    private var hasPromptedRestoreOnLaunch = false
+
+    private val restoreFileLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            val progress = AlertDialog.Builder(this)
+                .setTitle("Restoring Backup")
+                .setMessage("Extracting documents, OCR text, and pages...")
+                .setCancelable(false)
+                .show()
+
+            lifecycleScope.launch {
+                try {
+                    val tempZip = java.io.File(cacheDir, "restore_import_${System.currentTimeMillis()}.zip")
+                    contentResolver.openInputStream(it)?.use { input ->
+                        java.io.FileOutputStream(tempZip).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    val result = withContext(Dispatchers.IO) {
+                        CloudBackupManager.restoreBackupArchive(this@MainActivity, tempZip)
+                    }
+                    progress.dismiss()
+                    result.onSuccess { count ->
+                        Toast.makeText(this@MainActivity, "Restored $count documents successfully!", Toast.LENGTH_LONG).show()
+                        applyFilters()
+                        updateAccountBanner()
+                    }.onFailure { err ->
+                        Toast.makeText(this@MainActivity, "Restore error: ${err.message}", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    progress.dismiss()
+                    Toast.makeText(this@MainActivity, "Failed to read backup file: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -527,47 +567,155 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun updateAccountBanner() {
-        val user = GoogleAuthManager.getUserProfile(this)
-        val lastBackupTime = CloudBackupManager.getLastBackupTime(this)
+    private fun promptRestoreBackup(backupFile: File) {
+        val sizeKb = backupFile.length() / 1024
+        val dateStr = SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault()).format(Date(backupFile.lastModified()))
+        AlertDialog.Builder(this)
+            .setTitle("Restore Your Scans?")
+            .setMessage("Found your previous backup archive on device:\n${backupFile.name}\n($sizeKb KB • $dateStr)\n\nWould you like to restore all your documents now?")
+            .setPositiveButton("Restore Now") { _, _ ->
+                val progress = AlertDialog.Builder(this)
+                    .setTitle("Restoring Backup")
+                    .setMessage("Extracting documents, OCR text, and pages...")
+                    .setCancelable(false)
+                    .show()
 
-        if (user != null) {
-            val displayName = user.displayName ?: user.email ?: "Google Account"
-            binding.tvAccountName.text = "👤 $displayName"
-            if (lastBackupTime > 0) {
-                val timeStr = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(lastBackupTime))
-                binding.tvAccountBackupStatus.text = "✅ Backup Saved to Google ($timeStr)"
-                binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#2E7D32"))
-                binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_check)
-                binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#2E7D32"))
-                binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#E8F5E9"))
-                binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#81C784")
-                binding.btnAccountAction.text = "Manage"
-            } else {
-                binding.tvAccountBackupStatus.text = "⚠️ Signed In • No Cloud Backup Yet (Tap to Backup)"
-                binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#E65100"))
-                binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
-                binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#E65100"))
-                binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#FFF3E0"))
-                binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#FFB74D")
-                binding.btnAccountAction.text = "Backup Now"
+                lifecycleScope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        CloudBackupManager.restoreBackupArchive(this@MainActivity, backupFile)
+                    }
+                    progress.dismiss()
+                    result.onSuccess { count ->
+                        Toast.makeText(this@MainActivity, "Restored $count documents successfully!", Toast.LENGTH_LONG).show()
+                        applyFilters()
+                        updateAccountBanner()
+                    }.onFailure { err ->
+                        Toast.makeText(this@MainActivity, "Restore error: ${err.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
-        } else {
-            binding.tvAccountName.text = "☁️ Google Cloud Backup"
-            binding.tvAccountBackupStatus.text = "Sign in with Gmail to secure & restore your scans"
-            binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#757575"))
-            binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
-            binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#00A86B"))
-            binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#F1F5F9"))
-            binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#E2E8F0")
-            binding.btnAccountAction.text = "Sign In"
-        }
+            .setNeutralButton("Choose Another File") { _, _ ->
+                launchRestoreFilePicker()
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
 
-        binding.cardAccountBackupStatus.setOnClickListener {
-            startActivity(Intent(this, BackupActivity::class.java))
+    private fun launchRestoreFilePicker() {
+        try {
+            restoreFileLauncher.launch(
+                arrayOf(
+                    "application/zip",
+                    "application/octet-stream",
+                    "application/x-zip-compressed",
+                    "*/*"
+                )
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "Cannot open file picker: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-        binding.btnAccountAction.setOnClickListener {
-            startActivity(Intent(this, BackupActivity::class.java))
+    }
+
+    private fun updateAccountBanner() {
+        lifecycleScope.launch {
+            val user = GoogleAuthManager.getUserProfile(this@MainActivity)
+            val availableBackups = withContext(Dispatchers.IO) {
+                CloudBackupManager.findAvailableBackups(this@MainActivity)
+            }
+            val lastBackupTime = CloudBackupManager.getLastBackupTime(this@MainActivity)
+            val docCount = withContext(Dispatchers.IO) {
+                val db = com.camscanner.pro.data.local.AppDatabase.getInstance(this@MainActivity)
+                db.documentDao().getAllDocuments().size
+            }
+
+            if (docCount == 0 && availableBackups.isNotEmpty()) {
+                // REINSTALL / EMPTY DB SCENARIO: Previous backup archive found on storage!
+                val latest = availableBackups.first()
+                val sizeKb = latest.length() / 1024
+                val timeStr = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(latest.lastModified()))
+
+                binding.tvAccountName.text = if (user != null) "👤 ${user.displayName ?: "Google Account"}" else "📥 Backup Found from Previous Install"
+                binding.tvAccountBackupStatus.text = "📥 Previous Backup Available ($timeStr • $sizeKb KB)\nTap 'Restore' to recover all your documents!"
+                binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#1565C0"))
+                binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
+                binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#1565C0"))
+                binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#E3F2FD"))
+                binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#90CAF9")
+                binding.btnAccountAction.text = "Restore"
+
+                binding.btnAccountAction.setOnClickListener {
+                    promptRestoreBackup(latest)
+                }
+                binding.cardAccountBackupStatus.setOnClickListener {
+                    promptRestoreBackup(latest)
+                }
+
+                if (!hasPromptedRestoreOnLaunch) {
+                    hasPromptedRestoreOnLaunch = true
+                    promptRestoreBackup(latest)
+                }
+                return@launch
+            }
+
+            if (docCount == 0 && availableBackups.isEmpty() && user != null) {
+                // User signed in on fresh install, but no local file detected yet -> Offer Google Drive / File restore
+                val displayName = user.displayName ?: user.email ?: "Google Account"
+                binding.tvAccountName.text = "👤 $displayName"
+                binding.tvAccountBackupStatus.text = "🔄 Reinstalled? Tap to restore backup from Google Drive / Storage"
+                binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#1565C0"))
+                binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
+                binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#1565C0"))
+                binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#E3F2FD"))
+                binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#90CAF9")
+                binding.btnAccountAction.text = "Restore"
+
+                binding.btnAccountAction.setOnClickListener {
+                    launchRestoreFilePicker()
+                }
+                binding.cardAccountBackupStatus.setOnClickListener {
+                    startActivity(Intent(this@MainActivity, BackupActivity::class.java))
+                }
+                return@launch
+            }
+
+            if (user != null) {
+                val displayName = user.displayName ?: user.email ?: "Google Account"
+                binding.tvAccountName.text = "👤 $displayName"
+                if (lastBackupTime > 0) {
+                    val timeStr = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(lastBackupTime))
+                    binding.tvAccountBackupStatus.text = "✅ Backup Saved to Google ($timeStr)"
+                    binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#2E7D32"))
+                    binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_check)
+                    binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#2E7D32"))
+                    binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#E8F5E9"))
+                    binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#81C784")
+                    binding.btnAccountAction.text = "Manage"
+                } else {
+                    binding.tvAccountBackupStatus.text = "⚠️ Signed In • Not Backed Up Yet (Tap to Backup)"
+                    binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#E65100"))
+                    binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
+                    binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#E65100"))
+                    binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#FFF3E0"))
+                    binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#FFB74D")
+                    binding.btnAccountAction.text = "Backup Now"
+                }
+            } else {
+                binding.tvAccountName.text = "☁️ Google Cloud Backup"
+                binding.tvAccountBackupStatus.text = "Sign in with Gmail to secure & restore your scans"
+                binding.tvAccountBackupStatus.setTextColor(android.graphics.Color.parseColor("#757575"))
+                binding.ivAccountStatusIcon.setImageResource(R.drawable.ic_cloud)
+                binding.ivAccountStatusIcon.setColorFilter(android.graphics.Color.parseColor("#00A86B"))
+                binding.cardAccountBackupStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#F1F5F9"))
+                binding.cardAccountBackupStatus.strokeColor = android.graphics.Color.parseColor("#E2E8F0")
+                binding.btnAccountAction.text = "Sign In"
+            }
+
+            binding.cardAccountBackupStatus.setOnClickListener {
+                startActivity(Intent(this@MainActivity, BackupActivity::class.java))
+            }
+            binding.btnAccountAction.setOnClickListener {
+                startActivity(Intent(this@MainActivity, BackupActivity::class.java))
+            }
         }
     }
 }

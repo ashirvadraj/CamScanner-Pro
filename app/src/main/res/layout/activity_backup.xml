@@ -342,16 +342,38 @@
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="16dp"
-                        android:text="Restore from Cloud"
+                        android:text="⚡ 1-Tap Restore (Discovered Backups)"
                         app:cornerRadius="8dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRestoreFromFilePicker"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:text="📂 Restore from Google Drive / Storage (.zip)"
+                        android:textColor="@color/primary"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="@color/primary" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSaveToGoogleDrive"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:text="☁️ Upload / Save to Google Drive (For Switching Phones)"
+                        android:textColor="@color/primary"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="@color/primary" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnExportBackupArchive"
                         style="@style/Widget.Material3.Button.TextButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Share / Save Backup Archive (.zip)"
+                        android:layout_marginTop="6dp"
+                        android:text="📤 Share / Export Backup Archive (.zip)"
                         android:textColor="@color/primary" />
 
                 </LinearLayout>

@@ -77,7 +77,7 @@ class BackupActivity : AppCompatActivity() {
     }
 
     private val restoreFileLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let {
             lifecycleScope.launch {
@@ -93,6 +93,21 @@ class BackupActivity : AppCompatActivity() {
                     Toast.makeText(this@BackupActivity, "Failed to read backup file: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    private fun launchRestoreFilePicker() {
+        try {
+            restoreFileLauncher.launch(
+                arrayOf(
+                    "application/zip",
+                    "application/octet-stream",
+                    "application/x-zip-compressed",
+                    "*/*"
+                )
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "Cannot open file picker: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -149,6 +164,14 @@ class BackupActivity : AppCompatActivity() {
 
         binding.btnRestoreFromCloud.setOnClickListener {
             showRestoreOptionsDialog()
+        }
+
+        binding.btnRestoreFromFilePicker.setOnClickListener {
+            launchRestoreFilePicker()
+        }
+
+        binding.btnSaveToGoogleDrive.setOnClickListener {
+            saveBackupToGoogleDrive()
         }
 
         binding.btnExportBackupArchive.setOnClickListener {
@@ -314,20 +337,54 @@ class BackupActivity : AppCompatActivity() {
                 .setItems(items) { _, which ->
                     performRestore(backups[which])
                 }
-                .setNeutralButton("Choose File from Storage") { _, _ ->
-                    restoreFileLauncher.launch("application/zip")
+                .setNeutralButton("📂 Browse Google Drive / Files") { _, _ ->
+                    launchRestoreFilePicker()
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         } else {
             AlertDialog.Builder(this)
                 .setTitle("Restore Documents")
-                .setMessage("No automatic backup found in local storage. Select a backup (.zip) archive file to restore.")
-                .setPositiveButton("Choose File") { _, _ ->
-                    restoreFileLauncher.launch("application/zip")
+                .setMessage("No automatic backup found in local storage. Select a backup (.zip) archive from Google Drive, Downloads, or Files.")
+                .setPositiveButton("Browse File") { _, _ ->
+                    launchRestoreFilePicker()
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
+        }
+    }
+
+    private fun saveBackupToGoogleDrive() {
+        val lastBackup = CloudBackupManager.getLastBackupFile(this)
+        if (lastBackup == null || !lastBackup.exists()) {
+            AlertDialog.Builder(this)
+                .setTitle("No Backup Archive Found")
+                .setMessage("No backup archive is saved on this device yet. Would you like to create a backup archive now?")
+                .setPositiveButton("Back Up Now") { _, _ ->
+                    performBackup()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+
+        val uri = FileManager.getUriForFile(this, lastBackup)
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "CamScanner Pro Backup Archive (${lastBackup.name})")
+            putExtra(Intent.EXTRA_TEXT, "CamScanner Pro Cloud Backup Archive. Use this file to restore all your documents on any phone.")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        val driveIntent = Intent(sendIntent).apply {
+            setPackage("com.google.android.apps.docs")
+        }
+
+        try {
+            startActivity(driveIntent)
+        } catch (e: Exception) {
+            startActivity(Intent.createChooser(sendIntent, "Save Backup to Google Drive / Cloud"))
         }
     }
 
@@ -339,9 +396,11 @@ class BackupActivity : AppCompatActivity() {
             binding.tvUserName.text = "Signed in as: ${user.displayName}"
             binding.tvUserEmail.text = user.email ?: "Google Account"
             val lastBackupTime = CloudBackupManager.getLastBackupTime(this)
-            if (lastBackupTime > 0) {
-                val dateStr = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()).format(Date(lastBackupTime))
-                binding.tvBackupAccountStatus.text = "✅ Backups linked to this Gmail account (${user.displayName}). Last synced: $dateStr. If you delete the app or switch phones, sign in to restore your scans."
+            val availableBackups = CloudBackupManager.findAvailableBackups(this)
+            if (lastBackupTime > 0 || availableBackups.isNotEmpty()) {
+                val time = if (lastBackupTime > 0) lastBackupTime else availableBackups.first().lastModified()
+                val dateStr = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()).format(Date(time))
+                binding.tvBackupAccountStatus.text = "✅ Backups linked to this Gmail account (${user.displayName}). Backup available: $dateStr. If you delete the app or switch phones, restore your scans anytime."
             } else {
                 binding.tvBackupAccountStatus.text = "⚠️ Account connected (${user.displayName}). Tap 'Back Up All Documents Now' below to save your scans to Google."
             }
@@ -353,13 +412,21 @@ class BackupActivity : AppCompatActivity() {
 
     private fun loadStats() {
         val lastBackupTime = CloudBackupManager.getLastBackupTime(this)
-        if (lastBackupTime > 0) {
+        val backupFile = CloudBackupManager.getLastBackupFile(this)
+        if (lastBackupTime > 0 && backupFile != null && backupFile.exists()) {
             val dateStr = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()).format(Date(lastBackupTime))
-            val backupFile = CloudBackupManager.getLastBackupFile(this)
-            val sizeKb = if (backupFile != null) backupFile.length() / 1024 else 0
+            val sizeKb = backupFile.length() / 1024
             binding.tvLastBackupDate.text = "Last Backup: $dateStr ($sizeKb KB)"
         } else {
-            binding.tvLastBackupDate.text = "No backup created yet"
+            val backups = CloudBackupManager.findAvailableBackups(this)
+            if (backups.isNotEmpty()) {
+                val first = backups.first()
+                val dateStr = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()).format(Date(first.lastModified()))
+                val sizeKb = first.length() / 1024
+                binding.tvLastBackupDate.text = "Discovered Backup: $dateStr ($sizeKb KB)"
+            } else {
+                binding.tvLastBackupDate.text = "No backup created yet"
+            }
         }
 
         lifecycleScope.launch {

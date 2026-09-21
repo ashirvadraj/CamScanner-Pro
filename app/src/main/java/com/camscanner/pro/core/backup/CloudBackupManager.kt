@@ -3,6 +3,7 @@ package com.camscanner.pro.core.backup
 import android.content.Context
 import android.content.SharedPreferences
 import com.camscanner.pro.CamScannerApp
+import com.camscanner.pro.core.auth.GoogleAuthManager
 import com.camscanner.pro.core.storage.FileManager
 import com.camscanner.pro.data.local.entity.DocumentEntity
 import com.camscanner.pro.data.local.entity.PageEntity
@@ -31,6 +32,7 @@ object CloudBackupManager {
     private const val KEY_LAST_BACKUP = "key_last_backup_timestamp"
     private const val KEY_LAST_BACKUP_PATH = "key_last_backup_path"
     private const val KEY_AUTO_BACKUP_ENABLED = "key_auto_backup_enabled"
+    private const val KEY_HAD_DOCS_IN_SESSION = "key_had_documents_in_session"
 
     private val backupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var autoBackupJob: Job? = null
@@ -52,7 +54,14 @@ object CloudBackupManager {
         val saved = getPrefs(context).getLong(KEY_LAST_BACKUP, 0L)
         if (saved > 0) return saved
         val latest = findAvailableBackups(context).firstOrNull()
-        return latest?.lastModified() ?: 0L
+        val time = latest?.lastModified() ?: 0L
+        if (time > 0L) {
+            getPrefs(context).edit()
+                .putLong(KEY_LAST_BACKUP, time)
+                .putString(KEY_LAST_BACKUP_PATH, latest?.absolutePath)
+                .apply()
+        }
+        return time
     }
 
     fun getLastBackupFile(context: Context): File? {
@@ -61,59 +70,72 @@ object CloudBackupManager {
             val f = File(path)
             if (f.exists()) return f
         }
-        return findAvailableBackups(context).firstOrNull()
+        val latest = findAvailableBackups(context).firstOrNull()
+        if (latest != null) {
+            getPrefs(context).edit()
+                .putString(KEY_LAST_BACKUP_PATH, latest.absolutePath)
+                .putLong(KEY_LAST_BACKUP, latest.lastModified())
+                .apply()
+        }
+        return latest
     }
 
     /**
      * Finds any backup archives across internal storage, app external storage,
-     * Downloads, or Documents folders.
+     * public Documents folders, and Downloads folders. Scans recursively so backups
+     * survive app uninstallation and are immediately detected upon reinstallation.
      */
     fun findAvailableBackups(context: Context): List<File> {
         val backupFiles = mutableListOf<File>()
 
-        // 1. Internal backup directory
-        val internalDir = File(context.filesDir, "backups")
-        if (internalDir.exists() && internalDir.isDirectory) {
-            internalDir.listFiles { f -> f.extension.equals("zip", ignoreCase = true) }?.let {
-                backupFiles.addAll(it)
-            }
+        fun scanDir(dir: File?) {
+            if (dir == null || !dir.exists() || !dir.isDirectory) return
+            try {
+                dir.walkTopDown().maxDepth(3).forEach { file ->
+                    if (file.isFile && file.extension.equals("zip", ignoreCase = true)) {
+                        val lowerName = file.name.lowercase(Locale.ROOT)
+                        if (lowerName.contains("camscanner") ||
+                            lowerName.contains("backup") ||
+                            lowerName.contains("scan") ||
+                            lowerName.contains("manifest")) {
+                            backupFiles.add(file)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
+
+        // 1. Internal backup directory
+        scanDir(File(context.filesDir, "backups"))
 
         // 2. External app storage directory
-        val externalDir = File(context.getExternalFilesDir(null), "backups")
-        if (externalDir.exists() && externalDir.isDirectory) {
-            externalDir.listFiles { f -> f.extension.equals("zip", ignoreCase = true) }?.let {
-                backupFiles.addAll(it)
-            }
-        }
+        scanDir(File(context.getExternalFilesDir(null), "backups"))
 
-        // 3. Public Downloads folder
+        // 3. Public Documents directory & CamScanner Pro subfolders (survives app uninstallation)
         try {
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            if (downloadsDir.exists() && downloadsDir.isDirectory) {
-                downloadsDir.listFiles { f ->
-                    f.name.contains("camscanner", ignoreCase = true) && f.extension.equals("zip", ignoreCase = true)
-                }?.let {
-                    backupFiles.addAll(it)
-                }
-            }
-        } catch (e: Exception) {
-            // Handled
-        }
+            val pubDocDir = FileManager.getPublicDocumentsDir(context)
+            scanDir(pubDocDir)
+            scanDir(File(pubDocDir, "Backups"))
+            val sysDocDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+            scanDir(File(sysDocDir, "CamScanner Pro"))
+            scanDir(File(sysDocDir, "CamScanner Pro/Backups"))
+            scanDir(sysDocDir)
+        } catch (_: Exception) {}
 
-        // 4. Public Documents folder
+        // 4. Public Downloads directory & CamScanner Pro subfolders (survives app uninstallation)
         try {
-            val documentsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
-            if (documentsDir.exists() && documentsDir.isDirectory) {
-                documentsDir.listFiles { f ->
-                    f.name.contains("camscanner", ignoreCase = true) && f.extension.equals("zip", ignoreCase = true)
-                }?.let {
-                    backupFiles.addAll(it)
-                }
-            }
-        } catch (e: Exception) {
-            // Handled
-        }
+            val dlDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            scanDir(File(dlDir, "CamScanner Pro Backups"))
+            scanDir(File(dlDir, "CamScanner Pro"))
+            scanDir(dlDir)
+        } catch (_: Exception) {}
+
+        // 5. Root storage CamScanner directories
+        try {
+            val root = android.os.Environment.getExternalStorageDirectory()
+            scanDir(File(root, "CamScanner"))
+            scanDir(File(root, "CamScanner Pro"))
+        } catch (_: Exception) {}
 
         return backupFiles.distinctBy { it.absolutePath }.sortedByDescending { it.lastModified() }
     }
@@ -203,8 +225,43 @@ object CloudBackupManager {
             getPrefs(context).edit()
                 .putLong(KEY_LAST_BACKUP, now)
                 .putString(KEY_LAST_BACKUP_PATH, zipFile.absolutePath)
+                .putBoolean(KEY_HAD_DOCS_IN_SESSION, true)
                 .apply()
-            // Also mirror backup to external files directory for permanence across reinstall
+
+            // 1. Mirror backup to persistent public Documents ("Documents/CamScanner Pro/Backups")
+            // This directory SURVIVES app uninstallation!
+            try {
+                val pubBackupsDir = File(FileManager.getPublicDocumentsDir(context), "Backups").apply { if (!exists()) mkdirs() }
+                val pubCopy = File(pubBackupsDir, zipFile.name)
+                zipFile.copyTo(pubCopy, overwrite = true)
+                FileManager.scanFileForMedia(context, pubCopy, "application/zip")
+
+                // Maintain a 'latest' pointer for instant 1-tap restore after reinstall
+                val pubLatest = File(pubBackupsDir, "camscanner_cloud_backup_latest.zip")
+                zipFile.copyTo(pubLatest, overwrite = true)
+                FileManager.scanFileForMedia(context, pubLatest, "application/zip")
+
+                // Account-bound backup if user is logged in with Google/Gmail
+                val user = GoogleAuthManager.getUserProfile(context)
+                if (user != null) {
+                    val emailSlug = (user.email?.substringBefore("@") ?: user.displayName ?: "user")
+                        .replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+                    val userBackup = File(pubBackupsDir, "camscanner_backup_${emailSlug}_latest.zip")
+                    zipFile.copyTo(userBackup, overwrite = true)
+                    FileManager.scanFileForMedia(context, userBackup, "application/zip")
+                }
+            } catch (ignored: Exception) {}
+
+            // 2. Mirror backup to persistent public Downloads folder ("Download/CamScanner Pro Backups")
+            // This directory SURVIVES app uninstallation!
+            try {
+                val dlDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "CamScanner Pro Backups").apply { if (!exists()) mkdirs() }
+                val dlCopy = File(dlDir, zipFile.name)
+                zipFile.copyTo(dlCopy, overwrite = true)
+                FileManager.scanFileForMedia(context, dlCopy, "application/zip")
+            } catch (ignored: Exception) {}
+
+            // 3. Mirror backup to external files directory
             try {
                 val extBackupDir = File(context.getExternalFilesDir(null), "backups").apply { if (!exists()) mkdirs() }
                 val extCopy = File(extBackupDir, zipFile.name)
@@ -244,7 +301,14 @@ object CloudBackupManager {
             val allDocs = db.documentDao().getAllDocuments()
 
             if (allDocs.isEmpty()) {
-                // Purge local and external backup archives
+                // If there are 0 documents, only purge backups if user had documents in this install
+                // and explicitly deleted them (protects fresh reinstalls!)
+                val hadDocs = getPrefs(context).getBoolean(KEY_HAD_DOCS_IN_SESSION, false)
+                if (!hadDocs) {
+                    return@withContext Result.success(null)
+                }
+
+                // Purge internal, external, and public backup archives so deleted scans are removed
                 val internalDir = File(context.filesDir, "backups")
                 if (internalDir.exists()) {
                     internalDir.listFiles()?.forEach { try { it.delete() } catch (_: Exception) {} }
@@ -253,17 +317,25 @@ object CloudBackupManager {
                 if (extDir.exists()) {
                     extDir.listFiles()?.forEach { try { it.delete() } catch (_: Exception) {} }
                 }
+                try {
+                    val pubDir = File(FileManager.getPublicDocumentsDir(context), "Backups")
+                    if (pubDir.exists()) {
+                        pubDir.listFiles()?.forEach { try { it.delete() } catch (_: Exception) {} }
+                    }
+                } catch (_: Exception) {}
 
                 getPrefs(context).edit()
                     .putLong(KEY_LAST_BACKUP, System.currentTimeMillis())
                     .remove(KEY_LAST_BACKUP_PATH)
                     .apply()
                 return@withContext Result.success(null)
+            } else {
+                getPrefs(context).edit().putBoolean(KEY_HAD_DOCS_IN_SESSION, true).apply()
             }
 
             val backupRes = createBackupArchive(context)
             backupRes.onSuccess {
-                pruneOldBackups(context, keepLatest = 2)
+                pruneOldBackups(context, keepLatest = 3)
             }
             backupRes
         } catch (e: Throwable) {
@@ -272,27 +344,29 @@ object CloudBackupManager {
     }
 
     /**
-     * Prunes old backup archives, keeping the latest [keepLatest] copies.
+     * Prunes old backup archives across internal, external, and public folders,
+     * keeping the latest [keepLatest] copies.
      */
-    fun pruneOldBackups(context: Context, keepLatest: Int = 2) {
-        try {
-            val internalBackups = File(context.filesDir, "backups")
-                .listFiles { f -> f.extension.equals("zip", ignoreCase = true) }
-                ?.sortedByDescending { it.lastModified() }
-            if (internalBackups != null && internalBackups.size > keepLatest) {
-                internalBackups.drop(keepLatest).forEach { f ->
-                    try { f.delete() } catch (_: Exception) {}
+    fun pruneOldBackups(context: Context, keepLatest: Int = 3) {
+        fun pruneFolder(dir: File?) {
+            if (dir == null || !dir.exists()) return
+            try {
+                val zips = dir.listFiles { f -> f.extension.equals("zip", ignoreCase = true) }
+                    ?.filter { !it.name.contains("latest", ignoreCase = true) }
+                    ?.sortedByDescending { it.lastModified() }
+                if (zips != null && zips.size > keepLatest) {
+                    zips.drop(keepLatest).forEach { f ->
+                        try { f.delete() } catch (_: Exception) {}
+                    }
                 }
-            }
+            } catch (_: Exception) {}
+        }
 
-            val extBackups = File(context.getExternalFilesDir(null), "backups")
-                .listFiles { f -> f.extension.equals("zip", ignoreCase = true) }
-                ?.sortedByDescending { it.lastModified() }
-            if (extBackups != null && extBackups.size > keepLatest) {
-                extBackups.drop(keepLatest).forEach { f ->
-                    try { f.delete() } catch (_: Exception) {}
-                }
-            }
+        pruneFolder(File(context.filesDir, "backups"))
+        pruneFolder(File(context.getExternalFilesDir(null), "backups"))
+        try {
+            pruneFolder(File(FileManager.getPublicDocumentsDir(context), "Backups"))
+            pruneFolder(File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "CamScanner Pro Backups"))
         } catch (_: Exception) {}
     }
 
@@ -389,6 +463,13 @@ object CloudBackupManager {
 
                 restoredDocCount++
             }
+
+            // Update last backup timestamp and path
+            getPrefs(context).edit()
+                .putLong(KEY_LAST_BACKUP, zipFile.lastModified())
+                .putString(KEY_LAST_BACKUP_PATH, zipFile.absolutePath)
+                .putBoolean(KEY_HAD_DOCS_IN_SESSION, true)
+                .apply()
 
             Result.success(restoredDocCount)
         } catch (e: Throwable) {
