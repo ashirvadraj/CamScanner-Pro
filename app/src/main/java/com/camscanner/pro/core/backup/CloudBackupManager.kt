@@ -6,7 +6,12 @@ import com.camscanner.pro.CamScannerApp
 import com.camscanner.pro.core.storage.FileManager
 import com.camscanner.pro.data.local.entity.DocumentEntity
 import com.camscanner.pro.data.local.entity.PageEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -25,9 +30,23 @@ object CloudBackupManager {
     private const val PREFS_NAME = "camscanner_cloud_prefs"
     private const val KEY_LAST_BACKUP = "key_last_backup_timestamp"
     private const val KEY_LAST_BACKUP_PATH = "key_last_backup_path"
+    private const val KEY_AUTO_BACKUP_ENABLED = "key_auto_backup_enabled"
+
+    private val backupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var autoBackupJob: Job? = null
 
     private fun getPrefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun isAutoBackupEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_AUTO_BACKUP_ENABLED, true)
+
+    fun setAutoBackupEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_AUTO_BACKUP_ENABLED, enabled).apply()
+        if (enabled) {
+            triggerAutoBackup(context, delayMs = 300L)
+        }
+    }
 
     fun getLastBackupTime(context: Context): Long {
         val saved = getPrefs(context).getLong(KEY_LAST_BACKUP, 0L)
@@ -196,6 +215,85 @@ object CloudBackupManager {
         } catch (e: Throwable) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Debounced auto-backup trigger: Automatically packages new documents/pages
+     * or purges deleted documents in a background coroutine without blocking the UI.
+     */
+    fun triggerAutoBackup(context: Context, delayMs: Long = 1000L) {
+        val appContext = context.applicationContext
+        if (!isAutoBackupEnabled(appContext)) return
+
+        autoBackupJob?.cancel()
+        autoBackupJob = backupScope.launch {
+            delay(delayMs)
+            performAutoSync(appContext)
+        }
+    }
+
+    /**
+     * Synchronizes backup state with current Room DB documents.
+     * If documents exist, builds a fresh backup archive and removes stale archives.
+     * If 0 documents exist (all deleted), removes old backup archives so deleted documents
+     * are completely purged from backup.
+     */
+    suspend fun performAutoSync(context: Context): Result<File?> = withContext(Dispatchers.IO) {
+        try {
+            val db = com.camscanner.pro.data.local.AppDatabase.getInstance(context)
+            val allDocs = db.documentDao().getAllDocuments()
+
+            if (allDocs.isEmpty()) {
+                // Purge local and external backup archives
+                val internalDir = File(context.filesDir, "backups")
+                if (internalDir.exists()) {
+                    internalDir.listFiles()?.forEach { try { it.delete() } catch (_: Exception) {} }
+                }
+                val extDir = File(context.getExternalFilesDir(null), "backups")
+                if (extDir.exists()) {
+                    extDir.listFiles()?.forEach { try { it.delete() } catch (_: Exception) {} }
+                }
+
+                getPrefs(context).edit()
+                    .putLong(KEY_LAST_BACKUP, System.currentTimeMillis())
+                    .remove(KEY_LAST_BACKUP_PATH)
+                    .apply()
+                return@withContext Result.success(null)
+            }
+
+            val backupRes = createBackupArchive(context)
+            backupRes.onSuccess {
+                pruneOldBackups(context, keepLatest = 2)
+            }
+            backupRes
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Prunes old backup archives, keeping the latest [keepLatest] copies.
+     */
+    fun pruneOldBackups(context: Context, keepLatest: Int = 2) {
+        try {
+            val internalBackups = File(context.filesDir, "backups")
+                .listFiles { f -> f.extension.equals("zip", ignoreCase = true) }
+                ?.sortedByDescending { it.lastModified() }
+            if (internalBackups != null && internalBackups.size > keepLatest) {
+                internalBackups.drop(keepLatest).forEach { f ->
+                    try { f.delete() } catch (_: Exception) {}
+                }
+            }
+
+            val extBackups = File(context.getExternalFilesDir(null), "backups")
+                .listFiles { f -> f.extension.equals("zip", ignoreCase = true) }
+                ?.sortedByDescending { it.lastModified() }
+            if (extBackups != null && extBackups.size > keepLatest) {
+                extBackups.drop(keepLatest).forEach { f ->
+                    try { f.delete() } catch (_: Exception) {}
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     /**

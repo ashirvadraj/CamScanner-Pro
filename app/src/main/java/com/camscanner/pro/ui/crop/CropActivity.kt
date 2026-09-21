@@ -79,6 +79,7 @@ class CropActivity : AppCompatActivity() {
                 PointF2D(displayBounds.left, displayBounds.bottom)
             )
             binding.cropOverlay.setQuad(q, sourceBitmap, displayBounds)
+            Toast.makeText(this, "🖼️ Full image frame selected", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnNext.setOnClickListener {
@@ -150,6 +151,7 @@ class CropActivity : AppCompatActivity() {
             )
 
             binding.cropOverlay.setQuad(viewQuad, bm, displayBounds)
+            Toast.makeText(this@CropActivity, "✨ Document edges detected & snapped", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -166,6 +168,7 @@ class CropActivity : AppCompatActivity() {
             PointF2D(displayBounds.left + fullDocQuad.bottomLeft.x * scaleX, displayBounds.top + fullDocQuad.bottomLeft.y * scaleY)
         )
         binding.cropOverlay.setQuad(viewQuad, bm, displayBounds)
+        Toast.makeText(this@CropActivity, "📄 Full document bounds applied", Toast.LENGTH_SHORT).show()
     }
 
     private fun processCropAndProceed() {

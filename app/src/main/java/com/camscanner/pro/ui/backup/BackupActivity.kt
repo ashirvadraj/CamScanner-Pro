@@ -174,6 +174,20 @@ class BackupActivity : AppCompatActivity() {
         binding.btnFetchCamScannerFolder.setOnClickListener {
             camScannerFolderPickerLauncher.launch(null)
         }
+
+        binding.switchAutoBackup.isChecked = CloudBackupManager.isAutoBackupEnabled(this)
+        binding.switchAutoBackup.setOnCheckedChangeListener { _, isChecked ->
+            CloudBackupManager.setAutoBackupEnabled(this, isChecked)
+            if (isChecked) {
+                binding.tvAutoBackupStatus.text = "Automatically saves new scans & purges deleted docs"
+                binding.tvAutoBackupStatus.setTextColor(android.graphics.Color.parseColor("#2E7D32"))
+                Toast.makeText(this, "Auto-Backup enabled", Toast.LENGTH_SHORT).show()
+            } else {
+                binding.tvAutoBackupStatus.text = "Auto-backup disabled (manual backup only)"
+                binding.tvAutoBackupStatus.setTextColor(android.graphics.Color.parseColor("#757575"))
+                Toast.makeText(this, "Auto-Backup disabled", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun launchDeviceAccountPicker() {

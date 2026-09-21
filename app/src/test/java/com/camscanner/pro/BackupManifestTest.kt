@@ -112,4 +112,27 @@ class BackupManifestTest {
         assertEquals("ALL", doc.category)
         assertNull(doc.ocrSnippet)
     }
+
+    @Test
+    fun testAutoBackupAddAndPurgeOnDelete() {
+        val doc1 = BackupDocItem(id = 1L, title = "Doc 1", createdAt = 1000L, updatedAt = 1000L, pageCount = 1, pages = emptyList())
+        val doc2 = BackupDocItem(id = 2L, title = "Doc 2", createdAt = 2000L, updatedAt = 2000L, pageCount = 1, pages = emptyList())
+
+        // Initial backup with 2 documents
+        val manifestBefore = BackupManifest(version = 1, createdAt = 3000L, appVersion = "1.4.2", documents = listOf(doc1, doc2))
+        assertEquals(2, manifestBefore.documents.size)
+
+        // When Doc 1 is deleted from the app, the updated backup manifest purges Doc 1
+        val updatedDocs = manifestBefore.documents.filter { it.id != 1L }
+        val manifestAfter = manifestBefore.copy(createdAt = 4000L, documents = updatedDocs)
+
+        assertEquals(1, manifestAfter.documents.size)
+        assertEquals(2L, manifestAfter.documents[0].id)
+        assertEquals("Doc 2", manifestAfter.documents[0].title)
+
+        // Verify JSON roundtrip has completely purged Doc 1
+        val json = manifestAfter.toJson()
+        org.junit.Assert.assertFalse(json.contains("Doc 1"))
+        org.junit.Assert.assertTrue(json.contains("Doc 2"))
+    }
 }

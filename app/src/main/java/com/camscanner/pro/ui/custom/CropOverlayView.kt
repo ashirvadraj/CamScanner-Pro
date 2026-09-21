@@ -11,14 +11,13 @@ import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import com.camscanner.pro.core.cv.PointF2D
 import com.camscanner.pro.core.cv.QuadBounds
 import kotlin.math.hypot
-import kotlin.math.max
-import kotlin.math.min
 
 class CropOverlayView @JvmOverloads constructor(
     context: Context,
@@ -56,20 +55,65 @@ class CropOverlayView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
 
-    // Loupe Paint
-    private val loupeBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    // --- Enhanced Loupe / Magnifier Glass Paints ---
+    private val loupePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+    private val loupeBackgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        strokeWidth = 6f
+        style = Paint.Style.FILL
+    }
+
+    private val loupeShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#77000000")
+        style = Paint.Style.FILL
+    }
+
+    private val loupeOuterRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#44000000")
+        strokeWidth = 2f
         style = Paint.Style.STROKE
     }
 
-    private val loupeCrosshairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val loupeWhiteRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        strokeWidth = 7f
+        style = Paint.Style.STROKE
+    }
+
+    private val loupeCyanRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#00E5FF")
         strokeWidth = 3f
         style = Paint.Style.STROKE
     }
 
-    private val loupePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val loupeCrosshairShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#AA000000")
+        strokeWidth = 4f
+        style = Paint.Style.STROKE
+    }
+
+    private val loupeCrosshairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#00E5FF")
+        strokeWidth = 2f
+        style = Paint.Style.STROKE
+    }
+
+    private val loupeCenterDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#00E5FF")
+        style = Paint.Style.FILL
+    }
+
+    private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#CC1A1C1E")
+        style = Paint.Style.FILL
+    }
+
+    private val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 28f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
 
     private val cornerRadius = 32f
     private val innerRadius = 14f
@@ -81,8 +125,8 @@ class CropOverlayView @JvmOverloads constructor(
     private val lastTouch = PointF()
 
     // Loupe configuration
-    private val loupeRadius = 120f
-    private val loupeZoom = 2.0f
+    private val loupeRadius = 115f
+    private val loupeZoom = 2.4f
     private var showLoupe = false
     private val loupeCenter = PointF()
 
@@ -131,54 +175,137 @@ class CropOverlayView @JvmOverloads constructor(
             canvas.drawCircle(corner.x, corner.y, innerRadius, innerHandlePaint)
         }
 
-        // 6. Draw Magnifying Loupe when dragging a corner
-        if (showLoupe && activeDragIndex in 0..3 && sourceBitmap != null) {
-            drawLoupe(canvas, corners[activeDragIndex])
+        // 6. Draw Magnifying Loupe when dragging a corner or edge handle
+        if (showLoupe && activeDragIndex != -1 && sourceBitmap != null) {
+            val targetPoint = if (activeDragIndex in 0..3) {
+                corners[activeDragIndex]
+            } else if (activeDragIndex in 4..7) {
+                mids[activeDragIndex - 4]
+            } else null
+
+            targetPoint?.let { pt ->
+                drawLoupe(canvas, pt, activeDragIndex)
+            }
         }
     }
 
-    private fun drawLoupe(canvas: Canvas, targetCorner: PointF2D) {
+    private fun drawLoupe(canvas: Canvas, targetPoint: PointF2D, dragIndex: Int) {
         val bitmap = sourceBitmap ?: return
+        if (imageBounds.width() <= 0f || imageBounds.height() <= 0f) return
 
-        // Position loupe offset above the active touch
-        loupeCenter.x = targetCorner.x
-        loupeCenter.y = max(loupeRadius + 20f, targetCorner.y - loupeRadius - 60f)
+        // 1. Smart vertical & horizontal loupe positioning
+        // Avoid finger occlusion: If target is in upper 40% of view, place loupe below finger; else above.
+        val fingerClearance = 85f
+        var cy = if (targetPoint.y < height * 0.40f) {
+            targetPoint.y + loupeRadius + fingerClearance
+        } else {
+            targetPoint.y - loupeRadius - fingerClearance
+        }
 
-        // Ensure loupe stays inside view horizontally
-        if (loupeCenter.x - loupeRadius < 20f) loupeCenter.x = loupeRadius + 20f
-        if (loupeCenter.x + loupeRadius > width - 20f) loupeCenter.x = width - loupeRadius - 20f
+        // Keep horizontal center inside view bounds with 20px padding
+        val edgePadding = 20f
+        var cx = targetPoint.x
+        if (cx - loupeRadius < edgePadding) {
+            cx = loupeRadius + edgePadding
+        } else if (cx + loupeRadius > width - edgePadding) {
+            cx = width - loupeRadius - edgePadding
+        }
 
-        // Map targetCorner from View coordinates to sourceBitmap coordinates
+        // Clamp cy within view bounds
+        cy = cy.coerceIn(loupeRadius + edgePadding, height - loupeRadius - edgePadding)
+        loupeCenter.set(cx, cy)
+
+        // 2. Precise Bitmap Coordinate Mapping
+        // Bitmap coordinates of the target point:
         val scaleX = bitmap.width.toFloat() / imageBounds.width()
         val scaleY = bitmap.height.toFloat() / imageBounds.height()
 
-        // Build shader with 2x magnification centered at target point
+        val bmX = (targetPoint.x - imageBounds.left) * scaleX
+        val bmY = (targetPoint.y - imageBounds.top) * scaleY
+
+        // Display scale factor (screen pixels per bitmap pixel)
+        val screenPerBmX = imageBounds.width() / bitmap.width.toFloat()
+        val screenPerBmY = imageBounds.height() / bitmap.height.toFloat()
+
+        // Magnified scale in the shader
+        val shaderScaleX = screenPerBmX * loupeZoom
+        val shaderScaleY = screenPerBmY * loupeZoom
+
+        // Matrix maps bitmap (bmX, bmY) to canvas (loupeCenter.x, loupeCenter.y)
         val matrix = Matrix()
-        matrix.postScale(loupeZoom / scaleX, loupeZoom / scaleY)
-        matrix.postTranslate(
-            loupeCenter.x - targetCorner.x * loupeZoom,
-            loupeCenter.y - targetCorner.y * loupeZoom
-        )
+        matrix.postScale(shaderScaleX, shaderScaleY)
+        val transX = loupeCenter.x - bmX * shaderScaleX
+        val transY = loupeCenter.y - bmY * shaderScaleY
+        matrix.postTranslate(transX, transY)
 
         val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         shader.setLocalMatrix(matrix)
         loupePaint.shader = shader
 
-        // Draw zoomed circle
-        canvas.drawCircle(loupeCenter.x, loupeCenter.y, loupeRadius, loupePaint)
-        canvas.drawCircle(loupeCenter.x, loupeCenter.y, loupeRadius, loupeBorderPaint)
+        // 3. Drop Shadow for depth & contrast
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y + 5f, loupeRadius + 3f, loupeShadowPaint)
 
-        // Draw crosshair
-        canvas.drawLine(
-            loupeCenter.x - 20f, loupeCenter.y,
-            loupeCenter.x + 20f, loupeCenter.y,
-            loupeCrosshairPaint
-        )
-        canvas.drawLine(
-            loupeCenter.x, loupeCenter.y - 20f,
-            loupeCenter.x, loupeCenter.y + 20f,
-            loupeCrosshairPaint
-        )
+        // 4. Background Fill (clean neutral underlay)
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y, loupeRadius, loupeBackgroundPaint)
+
+        // 5. Magnified Image Content
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y, loupeRadius, loupePaint)
+
+        // 6. Multi-layer High-Contrast Ring Border
+        // Solid white inner ring
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y, loupeRadius, loupeWhiteRingPaint)
+        // Cyan accent ring
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y, loupeRadius - 4f, loupeCyanRingPaint)
+        // Outer subtle dark contour ring
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y, loupeRadius + 1f, loupeOuterRingPaint)
+
+        // 7. Reticle / Crosshair with center clearance
+        drawCrosshair(canvas, loupeCenter.x, loupeCenter.y, loupeCrosshairShadowPaint)
+        drawCrosshair(canvas, loupeCenter.x, loupeCenter.y, loupeCrosshairPaint)
+        // Precision center point dot
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y, 4f, loupeCenterDotPaint)
+        canvas.drawCircle(loupeCenter.x, loupeCenter.y, 2f, innerHandlePaint)
+
+        // 8. Badge label for the active corner / edge
+        val label = when (dragIndex) {
+            0 -> "TOP-LEFT"
+            1 -> "TOP-RIGHT"
+            2 -> "BOTTOM-RIGHT"
+            3 -> "BOTTOM-LEFT"
+            4 -> "TOP EDGE"
+            5 -> "RIGHT EDGE"
+            6 -> "BOTTOM EDGE"
+            7 -> "LEFT EDGE"
+            else -> "CORNER"
+        }
+        drawBadge(canvas, loupeCenter.x, loupeCenter.y, label)
+    }
+
+    private fun drawCrosshair(canvas: Canvas, cx: Float, cy: Float, paint: Paint) {
+        val innerR = 12f
+        val outerR = 38f
+        // Left ray
+        canvas.drawLine(cx - outerR, cy, cx - innerR, cy, paint)
+        // Right ray
+        canvas.drawLine(cx + innerR, cy, cx + outerR, cy, paint)
+        // Top ray
+        canvas.drawLine(cx, cy - outerR, cx, cy - innerR, paint)
+        // Bottom ray
+        canvas.drawLine(cx, cy + innerR, cx, cy + outerR, paint)
+    }
+
+    private fun drawBadge(canvas: Canvas, cx: Float, cy: Float, label: String) {
+        val badgeW = 200f
+        val badgeH = 46f
+        val badgeY = if (cy < height / 2f) {
+            cy + loupeRadius + 28f
+        } else {
+            cy - loupeRadius - 28f
+        }
+        val rect = RectF(cx - badgeW / 2f, badgeY - badgeH / 2f, cx + badgeW / 2f, badgeY + badgeH / 2f)
+        canvas.drawRoundRect(rect, 23f, 23f, badgePaint)
+        val textY = badgeY - ((badgeTextPaint.descent() + badgeTextPaint.ascent()) / 2f)
+        canvas.drawText(label, cx, textY, badgeTextPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -206,7 +333,7 @@ class CropOverlayView @JvmOverloads constructor(
                 for (i in mids.indices) {
                     if (hypot(tx - mids[i].x, ty - mids[i].y) < touchThreshold) {
                         activeDragIndex = 4 + i
-                        showLoupe = false
+                        showLoupe = true
                         invalidate()
                         return true
                     }

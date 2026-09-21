@@ -2,33 +2,37 @@ package com.camscanner.pro.core.cv
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 
 /**
  * Intelligent Document Boundary & Salient Region Detector.
  *
  * Implements a multi-stage Computer Vision pipeline:
- * 1. Background vs Foreground border luminance differential.
- * 2. High-frequency content salience (text, print, barcodes, lines, graphics).
- * 3. Otsu-based document blob segmentation & 4-corner convex extrema fitting.
- * 4. Multi-candidate decision arbiter:
- *    - Isolated documents (receipts, cards, checks, notes): Tightly selects the document quad.
- *    - Full page documents (A4 paper, contracts, book pages): Cleanly selects the full document page.
+ * 1. Background vs Foreground perimeter luminance and edge gradient differential.
+ * 2. Center-outward radial boundary ray casting (immune to external desk noise/highlights).
+ * 3. 4-quadrant corner localization with least-squares edge line fitting & intersection.
+ * 4. Convexity, aspect ratio, and area validation:
+ *    - Snaps accurately to document edges whether document covers 15% (receipt/card) or 90% (A4 on desk).
+ *    - Clean full page inset (1.5%) for close-up full frame documents.
+ * 5. High-frequency content salience fallback for low-contrast document bounds.
  */
 object EdgeDetector {
 
     /**
-     * Primary smart auto-detection: selects the most important part of the image
-     * (the receipt/card/document), or cleanly selects the full document page if it fills the view.
+     * Primary smart auto-detection: detects the document quad (paper, receipt, card, note)
+     * accurately across any background.
      */
     fun detectImportantPart(bitmap: Bitmap): QuadBounds {
         val origW = bitmap.width.toFloat()
         val origH = bitmap.height.toFloat()
 
-        // Working resolution ~360px for sub-25ms analysis
-        val maxDim = 360
+        // Working resolution ~380px for sub-30ms analysis
+        val maxDim = 380
         val scale = min(1.0f, maxDim.toFloat() / max(origW, origH))
         val targetW = (origW * scale).toInt().coerceAtLeast(60)
         val targetH = (origH * scale).toInt().coerceAtLeast(60)
@@ -74,7 +78,7 @@ object EdgeDetector {
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        // 1. Convert to Luminance
+        // 1. Grayscale luminance
         val lum = IntArray(w * h)
         var totalLum = 0L
         for (i in pixels.indices) {
@@ -88,29 +92,306 @@ object EdgeDetector {
         }
         val globalAvgLum = (totalLum / pixels.size).toInt()
 
-        // 2. Sample Border Luminance (background reference)
-        var borderLumSum = 0L
-        var borderCount = 0
-        for (x in 0 until w) {
-            borderLumSum += lum[x]                  // Top border
-            borderLumSum += lum[(h - 1) * w + x]    // Bottom border
-            borderCount += 2
+        // 2. Sobel edge gradient magnitude
+        val grad = IntArray(w * h)
+        var totalGrad = 0L
+        var y = 1
+        while (y < h - 1) {
+            val row = y * w
+            val prevRow = (y - 1) * w
+            val nextRow = (y + 1) * w
+            var x = 1
+            while (x < w - 1) {
+                val dx = abs(lum[row + x + 1] - lum[row + x - 1])
+                val dy = abs(lum[nextRow + x] - lum[prevRow + x])
+                val gVal = dx + dy
+                grad[row + x] = gVal
+                totalGrad += gVal
+                x++
+            }
+            y++
         }
-        for (y in 1 until h - 1) {
-            borderLumSum += lum[y * w]              // Left border
-            borderLumSum += lum[y * w + (w - 1)]    // Right border
-            borderCount += 2
-        }
-        val borderAvgLum = if (borderCount > 0) (borderLumSum / borderCount).toInt() else globalAvgLum
+        val avgGrad = (totalGrad / max(1, (w - 2) * (h - 2))).toInt()
 
-        // 3. Compute High-Frequency Salience (Gradient Energy Grid)
+        // 3. Robust Background Sampling (outer 6% perimeter bands)
+        val insetX = max(2, (w * 0.06f).toInt())
+        val insetY = max(2, (h * 0.06f).toInt())
+        var borderLumSum = 0L
+        var borderPixelCount = 0
+
+        for (by in 0 until h) {
+            val row = by * w
+            val inBandY = by < insetY || by >= h - insetY
+            for (bx in 0 until w) {
+                if (inBandY || bx < insetX || bx >= w - insetX) {
+                    borderLumSum += lum[row + bx]
+                    borderPixelCount++
+                }
+            }
+        }
+        val borderAvgLum = if (borderPixelCount > 0) (borderLumSum / borderPixelCount).toInt() else globalAvgLum
+
+        // Central region luminance (inner 60%)
+        val innerStartX = (w * 0.20f).toInt()
+        val innerEndX = (w * 0.80f).toInt()
+        val innerStartY = (h * 0.20f).toInt()
+        val innerEndY = (h * 0.80f).toInt()
+        var centerLumSum = 0L
+        var centerPixelCount = 0
+        for (cy in innerStartY until innerEndY) {
+            val row = cy * w
+            for (cx in innerStartX until innerEndX) {
+                centerLumSum += lum[row + cx]
+                centerPixelCount++
+            }
+        }
+        val centerAvgLum = if (centerPixelCount > 0) (centerLumSum / centerPixelCount).toInt() else globalAvgLum
+
+        // Determine if paper is lighter or darker than the background
+        val paperIsLighter = (centerAvgLum >= borderAvgLum - 10)
+
+        // Threshold calculation
+        val paperThreshold = if (paperIsLighter) {
+            max(borderAvgLum + 12, (borderAvgLum * 0.55f + centerAvgLum * 0.45f).toInt())
+        } else {
+            min(borderAvgLum - 12, (borderAvgLum * 0.55f + centerAvgLum * 0.45f).toInt())
+        }
+
+        // 4. Centroid of paper / salient region
+        var sumPaperX = 0L
+        var sumPaperY = 0L
+        var paperCount = 0
+        val paperMask = BooleanArray(w * h)
+
+        for (py in insetY until h - insetY) {
+            val row = py * w
+            for (px in insetX until w - insetX) {
+                val l = lum[row + px]
+                val isPaper = if (paperIsLighter) l >= paperThreshold else l <= paperThreshold
+                if (isPaper) {
+                    paperMask[row + px] = true
+                    sumPaperX += px
+                    sumPaperY += py
+                    paperCount++
+                }
+            }
+        }
+
+        val centerX = if (paperCount > 200) (sumPaperX.toFloat() / paperCount) else (w / 2f)
+        val centerY = if (paperCount > 200) (sumPaperY.toFloat() / paperCount) else (h / 2f)
+
+        // 5. Center-Outward Radial Boundary Ray Casting (36 rays, 10 degrees apart)
+        val numRays = 36
+        val rayDistances = FloatArray(numRays)
+        val rayPoints = ArrayList<PointF2D>(numRays)
+        val gradThreshold = max(18, (avgGrad * 1.3f).toInt())
+
+        for (k in 0 until numRays) {
+            val angle = (k * (2.0 * PI / numRays)).toFloat()
+            val cosA = cos(angle)
+            val sinA = sin(angle)
+
+            // Max distance along ray until canvas boundary
+            val maxRx = if (cosA > 0.001f) (w - 2f - centerX) / cosA else if (cosA < -0.001f) (1f - centerX) / cosA else Float.MAX_VALUE
+            val maxRy = if (sinA > 0.001f) (h - 2f - centerY) / sinA else if (sinA < -0.001f) (1f - centerY) / sinA else Float.MAX_VALUE
+            val maxR = min(maxRx, maxRy).coerceAtLeast(10f)
+
+            var bestR = maxR * 0.95f
+            var maxRGrad = 0
+            var bestGradR = -1f
+            var maskDropR = -1f
+
+            var r = 8f
+            while (r < maxR) {
+                val rx = (centerX + r * cosA).toInt().coerceIn(1, w - 2)
+                val ry = (centerY + r * sinA).toInt().coerceIn(1, h - 2)
+                val idx = ry * w + rx
+
+                val gVal = grad[idx]
+                if (gVal > maxRGrad) {
+                    maxRGrad = gVal
+                    bestGradR = r
+                }
+
+                if (maskDropR < 0f && !paperMask[idx]) {
+                    // Check next sample ahead to confirm boundary drop
+                    val nextR = min(maxR, r + 4f)
+                    val nrx = (centerX + nextR * cosA).toInt().coerceIn(1, w - 2)
+                    val nry = (centerY + nextR * sinA).toInt().coerceIn(1, h - 2)
+                    if (!paperMask[nry * w + nrx]) {
+                        maskDropR = r
+                    }
+                }
+                r += 2f
+            }
+
+            if (maskDropR > 0f) {
+                bestR = if (bestGradR > 0f && abs(bestGradR - maskDropR) < 25f) {
+                    bestGradR
+                } else {
+                    maskDropR
+                }
+            } else if (maxRGrad >= gradThreshold && bestGradR > 15f) {
+                bestR = bestGradR
+            }
+
+            rayDistances[k] = bestR
+            val px = (centerX + bestR * cosA).coerceIn(0f, w.toFloat())
+            val py = (centerY + bestR * sinA).coerceIn(0f, h.toFloat())
+            rayPoints.add(PointF2D(px, py))
+        }
+
+        // 6. Partition perimeter points into 4 edges
+        val topPoints = ArrayList<PointF2D>()
+        val rightPoints = ArrayList<PointF2D>()
+        val bottomPoints = ArrayList<PointF2D>()
+        val leftPoints = ArrayList<PointF2D>()
+
+        var bestTLProj = Float.MAX_VALUE
+        var bestTRProj = Float.MIN_VALUE
+        var bestBRProj = Float.MIN_VALUE
+        var bestBLProj = Float.MAX_VALUE
+
+        var rawTL = PointF2D(0f, 0f)
+        var rawTR = PointF2D(w.toFloat(), 0f)
+        var rawBR = PointF2D(w.toFloat(), h.toFloat())
+        var rawBL = PointF2D(0f, h.toFloat())
+
+        for (pt in rayPoints) {
+            val sum = pt.x + pt.y
+            val diff = pt.x - pt.y
+
+            if (sum < bestTLProj) {
+                bestTLProj = sum
+                rawTL = pt
+            }
+            if (sum > bestBRProj) {
+                bestBRProj = sum
+                rawBR = pt
+            }
+            if (diff > bestTRProj) {
+                bestTRProj = diff
+                rawTR = pt
+            }
+            if (diff < bestBLProj) {
+                bestBLProj = diff
+                rawBL = pt
+            }
+
+            // Quadrant allocation for edge line fitting
+            if (pt.y <= centerY && pt.x >= rawTL.x && pt.x <= rawTR.x) topPoints.add(pt)
+            if (pt.x >= centerX && pt.y >= rawTR.y && pt.y <= rawBR.y) rightPoints.add(pt)
+            if (pt.y >= centerY && pt.x >= rawBL.x && pt.x <= rawBR.x) bottomPoints.add(pt)
+            if (pt.x <= centerX && pt.y >= rawTL.y && pt.y <= rawBL.y) leftPoints.add(pt)
+        }
+
+        // 7. Line Fitting & Intersection for razor-sharp corners
+        val topL = fitLine(topPoints)
+        val rightL = fitLine(rightPoints)
+        val bottomL = fitLine(bottomPoints)
+        val leftL = fitLine(leftPoints)
+
+        val fitTL = (if (topL != null && leftL != null) topL.intersect(leftL) else null) ?: rawTL
+        val fitTR = (if (topL != null && rightL != null) topL.intersect(rightL) else null) ?: rawTR
+        val fitBR = (if (bottomL != null && rightL != null) bottomL.intersect(rightL) else null) ?: rawBR
+        val fitBL = (if (bottomL != null && leftL != null) bottomL.intersect(leftL) else null) ?: rawBL
+
+        fitTL.x = fitTL.x.coerceIn(0f, w.toFloat())
+        fitTL.y = fitTL.y.coerceIn(0f, h.toFloat())
+        fitTR.x = fitTR.x.coerceIn(0f, w.toFloat())
+        fitTR.y = fitTR.y.coerceIn(0f, h.toFloat())
+        fitBR.x = fitBR.x.coerceIn(0f, w.toFloat())
+        fitBR.y = fitBR.y.coerceIn(0f, h.toFloat())
+        fitBL.x = fitBL.x.coerceIn(0f, w.toFloat())
+        fitBL.y = fitBL.y.coerceIn(0f, h.toFloat())
+
+        val candidateQuad = QuadBounds(fitTL, fitTR, fitBR, fitBL)
+        val quadArea = computeQuadArea(fitTL, fitTR, fitBR, fitBL)
+        val areaRatio = quadArea / totalArea
+        val isConvex = isConvexQuad(fitTL, fitTR, fitBR, fitBL)
+
+        val topW = fitTL.distanceTo(fitTR)
+        val botW = fitBL.distanceTo(fitBR)
+        val leftH = fitTL.distanceTo(fitBL)
+        val rightH = fitTR.distanceTo(fitBR)
+        val maxW = max(topW, botW)
+        val maxH = max(leftH, rightH)
+        val aspectRatio = if (maxH > 0f) maxW / maxH else 1.0f
+
+        // 8. Decision Arbiter:
+        // Valid document quad check: covers between 10% and 96% of the frame, convex, and normal aspect ratio
+        if (isConvex && areaRatio in 0.10f..0.96f && aspectRatio in 0.22f..4.5f) {
+            return candidateQuad
+        }
+
+        // 9. High-Frequency Content Salience Fallback (for low-contrast backgrounds)
+        val salient = detectSalientRegion(lum, w, h)
+        if (salient != null) {
+            val sArea = computeQuadArea(salient.topLeft, salient.topRight, salient.bottomRight, salient.bottomLeft)
+            val sRatio = sArea / totalArea
+            if (sRatio in 0.08f..0.95f) {
+                return salient
+            }
+        }
+
+        // 10. Clean full page fallback with 1.5% margin
+        return QuadBounds.createDefaultInset(w.toFloat(), h.toFloat(), 0.015f)
+    }
+
+    private data class Line2D(val a: Float, val b: Float, val c: Float) {
+        // Line equation: a * x + b * y + c = 0
+        fun intersect(other: Line2D): PointF2D? {
+            val d = a * other.b - b * other.a
+            if (abs(d) < 1e-5f) return null
+            val x = (b * other.c - other.b * c) / d
+            val y = (other.a * c - a * other.c) / d
+            return PointF2D(x, y)
+        }
+    }
+
+    private fun fitLine(points: List<PointF2D>): Line2D? {
+        if (points.size < 3) return null
+        val n = points.size.toFloat()
+        var sumX = 0f
+        var sumY = 0f
+        for (p in points) {
+            sumX += p.x
+            sumY += p.y
+        }
+        val meanX = sumX / n
+        val meanY = sumY / n
+
+        var sxx = 0f
+        var syy = 0f
+        var sxy = 0f
+        for (p in points) {
+            val dx = p.x - meanX
+            val dy = p.y - meanY
+            sxx += dx * dx
+            syy += dy * dy
+            sxy += dx * dy
+        }
+
+        return if (sxx >= syy) {
+            if (sxx < 1e-4f) return null
+            val m = sxy / sxx
+            val c = meanY - m * meanX
+            Line2D(m, -1f, c)
+        } else {
+            if (syy < 1e-4f) return null
+            val m = sxy / syy
+            val c = meanX - m * meanY
+            Line2D(-1f, m, c)
+        }
+    }
+
+    private fun detectSalientRegion(lum: IntArray, w: Int, h: Int): QuadBounds? {
         val gridCols = 24
         val gridRows = 24
         val cellW = w.toFloat() / gridCols
         val cellH = h.toFloat() / gridRows
         val cellEnergy = Array(gridRows) { FloatArray(gridCols) }
         var totalEnergy = 0f
-        var maxCellEnergy = 0f
 
         for (gy in 0 until gridRows) {
             val startY = (gy * cellH).toInt().coerceIn(1, h - 2)
@@ -137,14 +418,12 @@ object EdgeDetector {
                 val avgCellEnergy = if (count > 0) energySum / count else 0f
                 cellEnergy[gy][gx] = avgCellEnergy
                 totalEnergy += avgCellEnergy
-                if (avgCellEnergy > maxCellEnergy) maxCellEnergy = avgCellEnergy
             }
         }
 
         val meanEnergy = totalEnergy / (gridRows * gridCols)
-        val energyThreshold = max(12f, meanEnergy * 0.75f)
+        val threshold = max(12f, meanEnergy * 0.70f)
 
-        // Find salient cell bounding box
         var minCellX = gridCols
         var maxCellX = 0
         var minCellY = gridRows
@@ -153,7 +432,7 @@ object EdgeDetector {
 
         for (gy in 0 until gridRows) {
             for (gx in 0 until gridCols) {
-                if (cellEnergy[gy][gx] >= energyThreshold) {
+                if (cellEnergy[gy][gx] >= threshold) {
                     if (gx < minCellX) minCellX = gx
                     if (gx > maxCellX) maxCellX = gx
                     if (gy < minCellY) minCellY = gy
@@ -163,9 +442,7 @@ object EdgeDetector {
             }
         }
 
-        val hasSalientContent = salientCellCount >= 6 && minCellX <= maxCellX && minCellY <= maxCellY
-        val salientBounds: QuadBounds? = if (hasSalientContent) {
-            // Expand by 1 cell margin for comfortable text padding
+        if (salientCellCount >= 6 && minCellX <= maxCellX && minCellY <= maxCellY) {
             val padX = cellW * 1.2f
             val padY = cellH * 1.2f
             val sLeft = max(0f, minCellX * cellW - padX)
@@ -173,107 +450,14 @@ object EdgeDetector {
             val sRight = min(w.toFloat(), (maxCellX + 1) * cellW + padX)
             val sBottom = min(h.toFloat(), (maxCellY + 1) * cellH + padY)
 
-            QuadBounds(
+            return QuadBounds(
                 PointF2D(sLeft, sTop),
                 PointF2D(sRight, sTop),
                 PointF2D(sRight, sBottom),
                 PointF2D(sLeft, sBottom)
             )
-        } else null
-
-        // 4. Document Paper Segmentation via Contrast
-        // Determine whether paper is lighter or darker than background
-        val paperIsLighter = (globalAvgLum >= borderAvgLum - 10)
-        val contrastDiff = abs(globalAvgLum - borderAvgLum)
-
-        // Calculate Otsu or adaptive threshold
-        val threshold = if (paperIsLighter) {
-            max(borderAvgLum + 15, (borderAvgLum * 0.6f + globalAvgLum * 0.4f).toInt())
-        } else {
-            min(borderAvgLum - 15, (borderAvgLum * 0.6f + globalAvgLum * 0.4f).toInt())
         }
-
-        // Collect paper candidate points
-        var minSum = Float.MAX_VALUE
-        var maxSum = Float.MIN_VALUE
-        var minDiff = Float.MAX_VALUE
-        var maxDiff = Float.MIN_VALUE
-
-        var pTL = PointF2D(0f, 0f)
-        var pBR = PointF2D(w.toFloat(), h.toFloat())
-        var pTR = PointF2D(w.toFloat(), 0f)
-        var pBL = PointF2D(0f, h.toFloat())
-
-        var paperPixelCount = 0
-        val insetMarginX = (w * 0.02f).toInt()
-        val insetMarginY = (h * 0.02f).toInt()
-
-        val step = 3
-        for (y in insetMarginY until h - insetMarginY step step) {
-            val row = y * w
-            for (x in insetMarginX until w - insetMarginX step step) {
-                val l = lum[row + x]
-                val isPaperPixel = if (paperIsLighter) l >= threshold else l <= threshold
-
-                if (isPaperPixel) {
-                    paperPixelCount++
-                    val fx = x.toFloat()
-                    val fy = y.toFloat()
-
-                    val sum = fx + fy
-                    if (sum < minSum) {
-                        minSum = sum
-                        pTL = PointF2D(fx, fy)
-                    }
-                    if (sum > maxSum) {
-                        maxSum = sum
-                        pBR = PointF2D(fx, fy)
-                    }
-
-                    val diff = fy - fx
-                    if (diff < minDiff) {
-                        minDiff = diff
-                        pTR = PointF2D(fx, fy)
-                    }
-                    if (diff > maxDiff) {
-                        maxDiff = diff
-                        pBL = PointF2D(fx, fy)
-                    }
-                }
-            }
-        }
-
-        val totalSampledPixels = ((w - 2 * insetMarginX) / step) * ((h - 2 * insetMarginY) / step)
-        val paperRatio = if (totalSampledPixels > 0) paperPixelCount.toFloat() / totalSampledPixels else 0f
-
-        // Evaluate candidate paper quad
-        val candidateQuad = QuadBounds(pTL, pTR, pBR, pBL)
-        val quadArea = computeQuadArea(pTL, pTR, pBR, pBL)
-        val isConvex = isConvexQuad(pTL, pTR, pBR, pBL)
-        val areaRatio = quadArea / totalArea
-
-        // Decision Arbiter:
-        // Case 1: Full-page document filling the entire view (areaRatio > 0.75 or paper covers almost whole view)
-        if (paperRatio > 0.75f || areaRatio > 0.75f || (salientBounds != null && computeQuadArea(salientBounds.topLeft, salientBounds.topRight, salientBounds.bottomRight, salientBounds.bottomLeft) / totalArea > 0.72f)) {
-            // Document is full-page: select full page document with clean 1.5% margin
-            return QuadBounds.createDefaultInset(w.toFloat(), h.toFloat(), 0.015f)
-        }
-
-        // Case 2: Sub-frame document (receipt, card, check, photo on a table)
-        if (contrastDiff >= 12 && isConvex && areaRatio in 0.07f..0.75f) {
-            return candidateQuad
-        }
-
-        // Case 3: Content-based salient selection (when paper boundary contrast is subtle)
-        if (salientBounds != null) {
-            val sAreaRatio = computeQuadArea(salientBounds.topLeft, salientBounds.topRight, salientBounds.bottomRight, salientBounds.bottomLeft) / totalArea
-            if (sAreaRatio in 0.05f..0.75f) {
-                return salientBounds
-            }
-        }
-
-        // Case 4: Default clean full page document
-        return QuadBounds.createDefaultInset(w.toFloat(), h.toFloat(), 0.015f)
+        return null
     }
 
     /**

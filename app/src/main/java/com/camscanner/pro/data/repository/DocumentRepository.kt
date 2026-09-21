@@ -1,6 +1,7 @@
 package com.camscanner.pro.data.repository
 
 import android.content.Context
+import com.camscanner.pro.core.backup.CloudBackupManager
 import com.camscanner.pro.data.local.AppDatabase
 import com.camscanner.pro.data.local.entity.DocumentEntity
 import com.camscanner.pro.data.local.entity.PageEntity
@@ -11,6 +12,7 @@ import java.io.File
 
 class DocumentRepository(context: Context) {
 
+    private val appContext = context.applicationContext
     private val db = AppDatabase.getInstance(context)
     private val docDao = db.documentDao()
     private val pageDao = db.pageDao()
@@ -57,6 +59,7 @@ class DocumentRepository(context: Context) {
             ocrText = ocrText
         )
         pageDao.insertPage(page)
+        CloudBackupManager.triggerAutoBackup(appContext)
         docId
     }
 
@@ -95,12 +98,14 @@ class DocumentRepository(context: Context) {
                 )
             )
         }
+        CloudBackupManager.triggerAutoBackup(appContext)
     }
 
     suspend fun updateDocumentTitle(docId: Long, newTitle: String) = withContext(Dispatchers.IO) {
         val doc = docDao.getDocumentById(docId)
         if (doc != null) {
             docDao.updateDocument(doc.copy(title = newTitle, updatedAt = System.currentTimeMillis()))
+            CloudBackupManager.triggerAutoBackup(appContext)
         }
     }
 
@@ -108,6 +113,7 @@ class DocumentRepository(context: Context) {
         val doc = docDao.getDocumentById(docId)
         if (doc != null) {
             docDao.updateDocument(doc.copy(category = category, updatedAt = System.currentTimeMillis()))
+            CloudBackupManager.triggerAutoBackup(appContext)
         }
     }
 
@@ -119,6 +125,7 @@ class DocumentRepository(context: Context) {
             if (doc != null && page.pageIndex == 0) {
                 docDao.updateDocument(doc.copy(thumbnailPath = newImagePath, updatedAt = System.currentTimeMillis()))
             }
+            CloudBackupManager.triggerAutoBackup(appContext)
         }
     }
 
@@ -144,6 +151,7 @@ class DocumentRepository(context: Context) {
                 )
             }
         }
+        CloudBackupManager.triggerAutoBackup(appContext)
     }
 
     suspend fun deleteDocument(docId: Long) = withContext(Dispatchers.IO) {
@@ -155,5 +163,6 @@ class DocumentRepository(context: Context) {
             } catch (_: Exception) {}
         }
         docDao.deleteDocumentById(docId)
+        CloudBackupManager.triggerAutoBackup(appContext)
     }
 }
