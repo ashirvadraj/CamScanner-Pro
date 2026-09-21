@@ -149,6 +149,7 @@ object PdfCompressorEngine {
                 pdfDoc.writeTo(fos)
             }
             pdfDoc.close()
+            FileManager.scanFileForMedia(context, outputFile, "application/pdf")
 
             Result.success(
                 CompressResult(

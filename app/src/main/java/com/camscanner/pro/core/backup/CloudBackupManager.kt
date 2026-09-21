@@ -29,13 +29,74 @@ object CloudBackupManager {
     private fun getPrefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun getLastBackupTime(context: Context): Long =
-        getPrefs(context).getLong(KEY_LAST_BACKUP, 0L)
+    fun getLastBackupTime(context: Context): Long {
+        val saved = getPrefs(context).getLong(KEY_LAST_BACKUP, 0L)
+        if (saved > 0) return saved
+        val latest = findAvailableBackups(context).firstOrNull()
+        return latest?.lastModified() ?: 0L
+    }
 
     fun getLastBackupFile(context: Context): File? {
-        val path = getPrefs(context).getString(KEY_LAST_BACKUP_PATH, null) ?: return null
-        val f = File(path)
-        return if (f.exists()) f else null
+        val path = getPrefs(context).getString(KEY_LAST_BACKUP_PATH, null)
+        if (path != null) {
+            val f = File(path)
+            if (f.exists()) return f
+        }
+        return findAvailableBackups(context).firstOrNull()
+    }
+
+    /**
+     * Finds any backup archives across internal storage, app external storage,
+     * Downloads, or Documents folders.
+     */
+    fun findAvailableBackups(context: Context): List<File> {
+        val backupFiles = mutableListOf<File>()
+
+        // 1. Internal backup directory
+        val internalDir = File(context.filesDir, "backups")
+        if (internalDir.exists() && internalDir.isDirectory) {
+            internalDir.listFiles { f -> f.extension.equals("zip", ignoreCase = true) }?.let {
+                backupFiles.addAll(it)
+            }
+        }
+
+        // 2. External app storage directory
+        val externalDir = File(context.getExternalFilesDir(null), "backups")
+        if (externalDir.exists() && externalDir.isDirectory) {
+            externalDir.listFiles { f -> f.extension.equals("zip", ignoreCase = true) }?.let {
+                backupFiles.addAll(it)
+            }
+        }
+
+        // 3. Public Downloads folder
+        try {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            if (downloadsDir.exists() && downloadsDir.isDirectory) {
+                downloadsDir.listFiles { f ->
+                    f.name.contains("camscanner", ignoreCase = true) && f.extension.equals("zip", ignoreCase = true)
+                }?.let {
+                    backupFiles.addAll(it)
+                }
+            }
+        } catch (e: Exception) {
+            // Handled
+        }
+
+        // 4. Public Documents folder
+        try {
+            val documentsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+            if (documentsDir.exists() && documentsDir.isDirectory) {
+                documentsDir.listFiles { f ->
+                    f.name.contains("camscanner", ignoreCase = true) && f.extension.equals("zip", ignoreCase = true)
+                }?.let {
+                    backupFiles.addAll(it)
+                }
+            }
+        } catch (e: Exception) {
+            // Handled
+        }
+
+        return backupFiles.distinctBy { it.absolutePath }.sortedByDescending { it.lastModified() }
     }
 
     /**
@@ -124,6 +185,12 @@ object CloudBackupManager {
                 .putLong(KEY_LAST_BACKUP, now)
                 .putString(KEY_LAST_BACKUP_PATH, zipFile.absolutePath)
                 .apply()
+            // Also mirror backup to external files directory for permanence across reinstall
+            try {
+                val extBackupDir = File(context.getExternalFilesDir(null), "backups").apply { if (!exists()) mkdirs() }
+                val extCopy = File(extBackupDir, zipFile.name)
+                zipFile.copyTo(extCopy, overwrite = true)
+            } catch (ignored: Exception) {}
 
             Result.success(zipFile)
         } catch (e: Throwable) {

@@ -106,13 +106,13 @@ object PdfGenerator {
             }
 
             val sanitizedTitle = documentTitle.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val pdfFile = File(FileManager.getDocumentsDir(context), "${sanitizedTitle}_${timeStamp}.pdf")
+            val pdfFile = FileManager.getPdfFile(context, sanitizedTitle)
 
             FileOutputStream(pdfFile).use { out ->
                 pdfDocument.writeTo(out)
             }
 
+            FileManager.scanFileForMedia(context, pdfFile, "application/pdf")
             return pdfFile
         } finally {
             pdfDocument.close()

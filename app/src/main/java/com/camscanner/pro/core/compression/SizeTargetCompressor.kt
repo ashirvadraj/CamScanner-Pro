@@ -178,6 +178,7 @@ object SizeTargetCompressor {
         FileOutputStream(outputFile).use { fos ->
             fos.write(finalBytes)
         }
+        FileManager.scanFileForMedia(context, outputFile, "image/jpeg")
 
         if (currentBitmap != bitmap) {
             currentBitmap.recycle()

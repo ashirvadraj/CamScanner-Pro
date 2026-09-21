@@ -1,11 +1,14 @@
 package com.camscanner.pro.core.storage
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Environment
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
@@ -16,10 +19,71 @@ import kotlin.math.max
 
 object FileManager {
 
+    /**
+     * Internal documents directory for app database assets.
+     */
     fun getDocumentsDir(context: Context): File {
         val dir = File(context.filesDir, "documents")
         if (!dir.exists()) dir.mkdirs()
         return dir
+    }
+
+    /**
+     * Public Pictures album directory ("Pictures/CamScanner Pro")
+     * Files saved here appear directly in the phone's Gallery under the "CamScanner Pro" album.
+     */
+    fun getPublicPicturesDir(context: Context): File {
+        return try {
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val albumDir = File(picturesDir, "CamScanner Pro")
+            if (!albumDir.exists()) albumDir.mkdirs()
+            if (albumDir.exists()) albumDir else File(context.filesDir, "pictures").apply { if (!exists()) mkdirs() }
+        } catch (e: Exception) {
+            File(context.filesDir, "pictures").apply { if (!exists()) mkdirs() }
+        }
+    }
+
+    /**
+     * Public Documents folder ("Documents/CamScanner Pro")
+     * Files saved here appear directly in "My Files" -> Documents under the "CamScanner Pro" folder.
+     */
+    fun getPublicDocumentsDir(context: Context): File {
+        return try {
+            val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            val albumDir = File(documentsDir, "CamScanner Pro")
+            if (!albumDir.exists()) albumDir.mkdirs()
+            if (albumDir.exists()) {
+                albumDir
+            } else {
+                // Fallback to Download/CamScanner Pro
+                val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "CamScanner Pro")
+                if (!downloadDir.exists()) downloadDir.mkdirs()
+                if (downloadDir.exists()) downloadDir else getDocumentsDir(context)
+            }
+        } catch (e: Exception) {
+            getDocumentsDir(context)
+        }
+    }
+
+    /**
+     * Triggers the Android MediaStore scanner so the file immediately appears
+     * in the Gallery (for photos) or My Files (for PDFs).
+     */
+    fun scanFileForMedia(context: Context, file: File, mimeType: String? = null) {
+        if (!file.exists()) return
+        try {
+            MediaScannerConnection.scanFile(
+                context.applicationContext,
+                arrayOf(file.absolutePath),
+                if (mimeType != null) arrayOf(mimeType) else null
+            ) { _, _ -> }
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                intent.data = Uri.fromFile(file)
+                context.sendBroadcast(intent)
+            } catch (ignored: Exception) {}
+        }
     }
 
     fun createTempImageFile(context: Context): File {
@@ -28,15 +92,25 @@ object FileManager {
         return File.createTempFile("SCAN_${timeStamp}_", ".jpg", storageDir)
     }
 
+    /**
+     * Creates an image file in the public "Pictures/CamScanner Pro" album
+     * so it is immediately visible in the phone Gallery.
+     */
     fun createImageFile(context: Context, prefix: String = "IMG"): File {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
-        return File(getDocumentsDir(context), "${prefix}_${timeStamp}.jpg")
+        val file = File(getPublicPicturesDir(context), "${prefix}_${timeStamp}.jpg")
+        return file
     }
 
+    /**
+     * Creates a PDF file in the public "Documents/CamScanner Pro" folder
+     * so it is immediately visible in "My Files".
+     */
     fun getPdfFile(context: Context, title: String): File {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val sanitized = title.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
-        return File(getDocumentsDir(context), "${sanitized}_${timeStamp}.pdf")
+        val file = File(getPublicDocumentsDir(context), "${sanitized}_${timeStamp}.pdf")
+        return file
     }
 
     fun saveBitmap(context: Context, bitmap: Bitmap, prefix: String = "PAGE"): File {
@@ -45,6 +119,18 @@ object FileManager {
         FileOutputStream(file).use { out ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
         }
+        return file
+    }
+
+    /**
+     * Saves a bitmap directly to the public Gallery "CamScanner Pro" album.
+     */
+    fun savePublicImage(context: Context, bitmap: Bitmap, prefix: String = "SCAN"): File {
+        val file = createImageFile(context, prefix)
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+        }
+        scanFileForMedia(context, file, "image/jpeg")
         return file
     }
 
