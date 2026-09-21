@@ -11,7 +11,8 @@
     <string name="flash_off">Off</string>
     
     <string name="crop_title">Adjust Document Boundaries</string>
-    <string name="crop_auto">Auto-Detect</string>
+    <string name="crop_auto">Auto (Smart)</string>
+    <string name="crop_full_doc">Full Document</string>
     <string name="crop_full">Full Image</string>
     <string name="crop_rotate">Rotate</string>
     <string name="crop_done">Next</string>

@@ -21,12 +21,15 @@ An enterprise-grade, offline-first Android Document Scanner application (equival
   - **ID Card (2-in-1) Mode**: Specialized guided mode that captures the **Front** and **Back** of an ID card/license and automatically aligns them side-by-side on a single printable A4 page.
 
 ### 📐 2. Smart Boundary Detection & 8-Handle Crop
-- **Auto Edge Detection**: Fast luminance-gradient edge detection algorithm that detects page boundaries in under 30ms.
+- **Auto Select Most Important Part (Salient Document Detector)**:
+  - Multi-stage Computer Vision pipeline combining border luminance differentials, high-frequency text/gradient energy grids, and Otsu convex extrema.
+  - **Sub-frame Document Detection**: If a receipt, business card, ID card, check, or note is on a surface/desk, it automatically identifies and tightly fits the 4-corner quadrilateral around that document, ignoring background clutter.
+  - **Full-Page Document Detection**: If the document is an A4 paper or book page that fills the viewfinder, it automatically detects that it's a full-page document and selects the entire page cleanly without cutting off margins or headers.
+  - **Perspective Dewarping**: 4-point projective homography matrix flattening skewed/tilted document captures into clean rectangular pages.
 - **Interactive 8-Point Crop Overlay**:
   - 4 corner handles + 4 edge midpoint handles.
   - **Magnifying Loupe**: Floating 2x zoom circular loupe with crosshairs follows active touch so fingers never obstruct corner positioning.
-  - Fallback to safe 8% inset margin or full image expansion.
-- **Perspective Dewarping**: 4-point projective homography matrix flattening skewed/tilted document captures into clean rectangular pages.
+  - Quick options: **Auto (Smart)** (most important part / document), **Full Document** (clean margins), and **Full Image** (border-to-border).
 
 ### 🎨 3. Post-Processing & Filters
 - **Magic Color**: Signature CamScanner enhancement with adaptive contrast and dynamic range boost.
@@ -78,6 +81,22 @@ An enterprise-grade, offline-first Android Document Scanner application (equival
 - **Cross-Device Restore**: Reinstalling the app or moving to a new phone? Sign in with your Google account, select your cloud backup or archive file, and instantly restore all documents and pages.
 - **Offline / Cloud Export**: Share your encrypted backup archive to Google Drive, email, or local external storage.
 
+### 🗜️ 12. Merge & Compress Studio (Exact Target Size Optimizer)
+- **PDF Merger with Target File Size Limit**:
+  - Select multiple PDFs and merge them into a single unified PDF.
+  - Set custom target file size limits (e.g., **500 KB**, **1 MB**, **2 MB**, or any custom KB value).
+  - Automatically calculates per-page byte budgets and optimizes raster streams to stay strictly within size limits without degrading document readability.
+- **Image Compressor to Exact Target Size (e.g., 1 MB ➜ 50 KB)**:
+  - Input any custom target size in Kilobytes (e.g., `50 KB`, `100 KB`).
+  - Adaptive 2-tier optimization: pixel budget estimation + binary search on JPEG/WebP quality factor.
+  - Compresses heavy multi-megabyte captures down to 50 KB with razor-sharp text clarity and zero macroblock distortion.
+  - Before vs. After comparison with file savings percentage and quality breakdown.
+
+### 🎨 13. Brand Adaptive Vector App Icon
+- Premium emerald and deep teal gradient background with layered depth.
+- Stylized document sheet with crisp folded corner, high-intensity glowing cyan scanner laser beam, and camera lens aperture iris emblem.
+- Adaptive icon vectors supporting all Android densities and launchers.
+
 ---
 
 ## 🏛 Architecture & Tech Stack
@@ -88,11 +107,12 @@ com.camscanner.pro/
 │   ├── auth/           # GoogleAuthManager (Google Sign-In authentication)
 │   ├── backup/         # CloudBackupManager, BackupManifest (ZIP archive & manifest serialization)
 │   ├── barcode/        # BarcodeScannerManager (ML Kit QR/Barcode detection)
+│   ├── compression/    # SizeTargetCompressor (Exact target KB image compressor)
 │   ├── cv/             # EdgeDetector, QuadBounds, PerspectiveTransformer, ImageFilterEngine,
 │   │                   # IdCardMerger, WatermarkStamper, SignatureStamper
 │   ├── migration/      # CamScannerImporter (PDF page rendering, batch image import, SAF folder scanning)
 │   ├── ocr/            # OcrManager (Google ML Kit on-device OCR)
-│   ├── pdf/            # PdfGenerator, PdfOptions, PageSize, PdfQuality
+│   ├── pdf/            # PdfGenerator, PdfOptions, PdfMergerEngine (Target size PDF merger)
 │   └── storage/        # FileManager (Scoped storage & sampled memory-safe bitmap decoding)
 ├── data/
 │   ├── local/
@@ -107,7 +127,8 @@ com.camscanner.pro/
     ├── custom/         # CropOverlayView, SignaturePadView
     ├── detail/         # DocumentDetailActivity (Page grid & PDF export customizer)
     ├── filter/         # FilterActivity (Magic Color & OCR extraction)
-    ├── main/           # MainActivity (Category filter chips, Search, CamScanner Import & Backup shortcuts)
+    ├── main/           # MainActivity (Category filter chips, Search, shortcuts for Import, Cloud, Studio)
+    ├── tools/          # MergeCompressActivity (PDF merger & target-size compressor studio)
     └── viewer/         # PagePreviewActivity (Full screen viewer with E-sign, Watermark, Barcode)
 ```
 
@@ -115,7 +136,9 @@ com.camscanner.pro/
 
 ## 🧪 Testing Suite
 
-CamScanner Pro includes 24 comprehensive unit tests verifying:
+CamScanner Pro includes 31 comprehensive unit tests verifying:
+- **SizeTargetCompressorTest**: Exact target size byte budget, savings percentage calculation, quality limits.
+- **PdfMergerEngineTest**: PDF merge models, page count tracking, file name sanitization.
 - **BackupManifestTest**: JSON manifest serialization, deserialization, schema integrity, and version compatibility.
 - **CamScannerImporterTest**: Filename sanitization, fallbacks, and multi-file import result models.
 - **QuadBoundsTest**: Polygon point ordering (TL, TR, BR, BL), Euclidean distance calculations, edge midpoints, and boundary clamping.
@@ -123,13 +146,13 @@ CamScanner Pro includes 24 comprehensive unit tests verifying:
 - **IdCardMergerTest**: ISO/IEC 7810 ID-1 card proportions and dual-card A4 canvas layout.
 - **BarcodeResultTest**: Barcode format mapping and URL parsing.
 - **ImageFilterTest**: Filter types, display titles, and color contrast translation matrices.
-- **EdgeDetectorTest**: Point math, distance metrics, and synthetic boundary calculations.
+- **EdgeDetectorTest**: Point math, distance metrics, Shoelace polygon area calculation, convexity checks, full-page margins, and synthetic boundary calculations.
 
 Run tests:
 ```bash
 ./gradlew testReleaseUnitTest
 ```
-*Result: 24 tests, 0 failures, 100% success rate.*
+*Result: 31 tests, 0 failures, 100% success rate.*
 
 ---
 
@@ -139,7 +162,7 @@ Run tests:
 ./gradlew assembleRelease
 ```
 The compiled release APK will be located at:
-`app/build/outputs/apk/release/CamScannerPro-v1.2.0.apk`
+`app/build/outputs/apk/release/CamScannerPro-v1.3.0.apk`
 
 ---
 

@@ -58,6 +58,10 @@
             android:name=".ui.backup.BackupActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".ui.tools.MergeCompressActivity"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

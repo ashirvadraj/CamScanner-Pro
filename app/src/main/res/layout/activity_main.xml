@@ -28,11 +28,10 @@
                 android:orientation="horizontal">
 
                 <ImageView
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:contentDescription="@string/app_name"
-                    android:src="@drawable/ic_camera"
-                    app:tint="@color/primary" />
+                    android:src="@drawable/ic_app_logo" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -62,6 +61,16 @@
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="Import from CamScanner"
                     android:src="@drawable/ic_import"
+                    app:tint="@color/primary" />
+
+                <!-- Merge & Compress Studio -->
+                <ImageButton
+                    android:id="@+id/btnMergeCompress"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Merge &amp; Compress Studio"
+                    android:src="@drawable/ic_compress"
                     app:tint="@color/primary" />
 
             </LinearLayout>

@@ -67,6 +67,10 @@ class CropActivity : AppCompatActivity() {
             autoDetectEdges()
         }
 
+        binding.btnFullDoc.setOnClickListener {
+            applyFullDocumentBounds()
+        }
+
         binding.btnFullImage.setOnClickListener {
             val q = QuadBounds(
                 PointF2D(displayBounds.left, displayBounds.top),
@@ -147,6 +151,21 @@ class CropActivity : AppCompatActivity() {
 
             binding.cropOverlay.setQuad(viewQuad, bm, displayBounds)
         }
+    }
+
+    private fun applyFullDocumentBounds() {
+        val bm = sourceBitmap ?: return
+        val fullDocQuad = EdgeDetector.detectFullPage(bm)
+        val scaleX = displayBounds.width() / bm.width.toFloat()
+        val scaleY = displayBounds.height() / bm.height.toFloat()
+
+        val viewQuad = QuadBounds(
+            PointF2D(displayBounds.left + fullDocQuad.topLeft.x * scaleX, displayBounds.top + fullDocQuad.topLeft.y * scaleY),
+            PointF2D(displayBounds.left + fullDocQuad.topRight.x * scaleX, displayBounds.top + fullDocQuad.topRight.y * scaleY),
+            PointF2D(displayBounds.left + fullDocQuad.bottomRight.x * scaleX, displayBounds.top + fullDocQuad.bottomRight.y * scaleY),
+            PointF2D(displayBounds.left + fullDocQuad.bottomLeft.x * scaleX, displayBounds.top + fullDocQuad.bottomLeft.y * scaleY)
+        )
+        binding.cropOverlay.setQuad(viewQuad, bm, displayBounds)
     }
 
     private fun processCropAndProceed() {

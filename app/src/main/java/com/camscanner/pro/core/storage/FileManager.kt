@@ -28,6 +28,17 @@ object FileManager {
         return File.createTempFile("SCAN_${timeStamp}_", ".jpg", storageDir)
     }
 
+    fun createImageFile(context: Context, prefix: String = "IMG"): File {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+        return File(getDocumentsDir(context), "${prefix}_${timeStamp}.jpg")
+    }
+
+    fun getPdfFile(context: Context, title: String): File {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val sanitized = title.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+        return File(getDocumentsDir(context), "${sanitized}_${timeStamp}.pdf")
+    }
+
     fun saveBitmap(context: Context, bitmap: Bitmap, prefix: String = "PAGE"): File {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
         val file = File(getDocumentsDir(context), "${prefix}_${timeStamp}.jpg")

@@ -27,6 +27,7 @@ import com.camscanner.pro.ui.backup.BackupActivity
 import com.camscanner.pro.ui.camera.CameraActivity
 import com.camscanner.pro.ui.crop.CropActivity
 import com.camscanner.pro.ui.detail.DocumentDetailActivity
+import com.camscanner.pro.ui.tools.MergeCompressActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -125,6 +126,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnImport.setOnClickListener { v ->
             showImportMenu(v)
+        }
+
+        binding.btnMergeCompress.setOnClickListener {
+            startActivity(Intent(this, MergeCompressActivity::class.java))
         }
 
         binding.swipeRefresh.setOnRefreshListener {
