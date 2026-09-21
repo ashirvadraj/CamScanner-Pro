@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">CamScanner Pro</string>
+    <string name="search_hint">Search scanned documents or text...</string>
+    <string name="no_documents_title">No Scanned Documents Yet</string>
+    <string name="no_documents_subtitle">Tap the camera or gallery button below to scan receipts, notes, IDs, and documents with auto-edge detection.</string>
+    
+    <string name="scan_single">Single Page</string>
+    <string name="scan_batch">Batch Mode</string>
+    <string name="flash_auto">Auto</string>
+    <string name="flash_on">On</string>
+    <string name="flash_off">Off</string>
+    
+    <string name="crop_title">Adjust Document Boundaries</string>
+    <string name="crop_auto">Auto-Detect</string>
+    <string name="crop_full">Full Image</string>
+    <string name="crop_rotate">Rotate</string>
+    <string name="crop_done">Next</string>
+    
+    <string name="filter_title">Enhance &amp; Process</string>
+    <string name="filter_original">Original</string>
+    <string name="filter_magic">Magic Color</string>
+    <string name="filter_gray">Grayscale</string>
+    <string name="filter_bw">B&amp;W Document</string>
+    <string name="filter_lighten">Lighten</string>
+    <string name="filter_ocr">Recognize Text (OCR)</string>
+    
+    <string name="save_document">Save Document</string>
+    <string name="export_pdf">Export as PDF</string>
+    <string name="share_images">Share Images</string>
+    <string name="add_page">Add Page</string>
+    <string name="delete_document">Delete Document</string>
+    <string name="rename_document">Rename</string>
+    <string name="ocr_extracted_text">Extracted Text (OCR)</string>
+    <string name="copy_text">Copy Text</string>
+    <string name="text_copied">Text copied to clipboard!</string>
+    <string name="pdf_exported">PDF generated successfully!</string>
+</resources>
