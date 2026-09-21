@@ -64,6 +64,24 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Top Status / Hint Banner -->
+    <TextView
+        android:id="@+id/tvCameraHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="#99000000"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="6dp"
+        android:text="Align document inside frame"
+        android:textColor="@color/white"
+        android:textSize="13sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/topBar" />
+
     <!-- Bottom Controls Container -->
     <LinearLayout
         android:id="@+id/bottomBar"
@@ -74,7 +92,7 @@
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- Mode Selector: Single vs Batch -->
+        <!-- Mode Selector: Single vs Batch vs ID Card -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -88,26 +106,38 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@color/primary"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="6dp"
-                android:paddingEnd="16dp"
+                android:paddingEnd="12dp"
                 android:paddingBottom="6dp"
                 android:text="@string/scan_single"
                 android:textColor="@color/white"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/tabBatch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:paddingStart="16dp"
+                android:paddingStart="12dp"
                 android:paddingTop="6dp"
-                android:paddingEnd="16dp"
+                android:paddingEnd="12dp"
                 android:paddingBottom="6dp"
                 android:text="@string/scan_batch"
                 android:textColor="#CCFFFFFF"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tabIdCard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="6dp"
+                android:text="ID Card (2-in-1)"
+                android:textColor="#CCFFFFFF"
+                android:textSize="12sp" />
 
         </LinearLayout>
 

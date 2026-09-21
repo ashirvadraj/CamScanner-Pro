@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-black"
+            android:text="PDF Export Options"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp" />
+
+        <!-- Page Sizing -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="Page Layout:"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <RadioGroup
+            android:id="@+id/rgPageSize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp">
+
+            <RadioButton
+                android:id="@+id/rbA4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="A4 Standard (595 × 842 pt)" />
+
+            <RadioButton
+                android:id="@+id/rbLetter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="US Letter (612 × 792 pt)" />
+
+            <RadioButton
+                android:id="@+id/rbFitImage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Fit to Image (Zero Margins)" />
+
+        </RadioGroup>
+
+        <!-- Quality Sizing -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="Export Quality &amp; Compression:"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <RadioGroup
+            android:id="@+id/rgQuality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp">
+
+            <RadioButton
+                android:id="@+id/rbQualityHigh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="High Quality (Best for printing)" />
+
+            <RadioButton
+                android:id="@+id/rbQualityMedium"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Medium (Standard compression)" />
+
+            <RadioButton
+                android:id="@+id/rbQualityCompact"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Compact (Optimized for email)" />
+
+        </RadioGroup>
+
+        <!-- Custom Watermark -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="Document Watermark (Optional):"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="Watermark text (e.g. CONFIDENTIAL)">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etWatermark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Action Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="end"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelPdf"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:text="Cancel" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnExportSharePdf"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:backgroundTint="@color/primary"
+                android:text="Export &amp; Share PDF"
+                android:textColor="@color/white" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

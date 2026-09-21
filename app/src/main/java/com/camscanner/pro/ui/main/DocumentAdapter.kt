@@ -31,6 +31,13 @@ class DocumentAdapter(
             val pageText = if (doc.pageCount == 1) "1 Page" else "${doc.pageCount} Pages"
             binding.tvDate.text = "$formattedDate • $pageText"
 
+            if (doc.category.isNotEmpty() && doc.category != "ALL") {
+                binding.tvCategoryBadge.visibility = View.VISIBLE
+                binding.tvCategoryBadge.text = doc.category.replace("_", " ")
+            } else {
+                binding.tvCategoryBadge.visibility = View.GONE
+            }
+
             if (!doc.ocrSnippet.isNullOrBlank()) {
                 binding.tvSnippet.visibility = View.VISIBLE
                 binding.tvSnippet.text = "“${doc.ocrSnippet}…”"

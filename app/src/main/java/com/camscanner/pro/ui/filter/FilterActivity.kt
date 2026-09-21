@@ -45,6 +45,7 @@ class FilterActivity : AppCompatActivity() {
     private var isBatch: Boolean = false
     private var batchRemaining = java.util.ArrayList<String>()
     private var addToDocId: Long = -1L
+    private var category: String = "ALL"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +57,7 @@ class FilterActivity : AppCompatActivity() {
         isBatch = intent.getBooleanExtra("IS_BATCH", false)
         batchRemaining = intent.getStringArrayListExtra("BATCH_REMAINING") ?: java.util.ArrayList()
         addToDocId = intent.getLongExtra("ADD_TO_DOC_ID", -1L)
+        category = intent.getStringExtra("CATEGORY") ?: "ALL"
 
         if (imagePath.isEmpty() || !File(imagePath).exists()) {
             Toast.makeText(this, "Image not found", Toast.LENGTH_SHORT).show()
@@ -195,13 +197,14 @@ class FilterActivity : AppCompatActivity() {
             var targetDocId = addToDocId
             if (targetDocId == -1L) {
                 val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                val title = "Scan_$timeStamp"
+                val title = if (category == "ID_CARD") "ID_Card_$timeStamp" else "Scan_$timeStamp"
                 targetDocId = repository.createDocumentWithPage(
                     title = title,
                     processedImagePath = finalFile.absolutePath,
                     originalImagePath = originalImagePath,
                     filterType = currentFilterType.name,
-                    ocrText = extractedOcrText
+                    ocrText = extractedOcrText,
+                    category = category
                 )
             } else {
                 repository.addPageToDocument(

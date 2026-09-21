@@ -13,5 +13,6 @@ data class DocumentEntity(
     val updatedAt: Long = System.currentTimeMillis(),
     val pageCount: Int = 1,
     val thumbnailPath: String? = null,
-    val ocrSnippet: String? = null
+    val ocrSnippet: String? = null,
+    val category: String = "ALL"
 ) : Serializable

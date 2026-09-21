@@ -82,8 +82,12 @@ class DocumentDetailActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         adapter = PageGridAdapter(
-            onPageClick = { _ ->
-                // Preview full page image
+            onPageClick = { page ->
+                val intent = Intent(this, com.camscanner.pro.ui.viewer.PagePreviewActivity::class.java).apply {
+                    putExtra("PAGE_ID", page.id)
+                    putExtra("IMAGE_PATH", page.imagePath)
+                }
+                startActivity(intent)
             },
             onOcrClick = { page ->
                 showOcrDialog(page.ocrText ?: "No text recognized for this page.")
@@ -186,26 +190,59 @@ class DocumentDetailActivity : AppCompatActivity() {
             return
         }
 
-        lifecycleScope.launch {
-            binding.btnExportPdf.isEnabled = false
-            Toast.makeText(this@DocumentDetailActivity, "Generating PDF...", Toast.LENGTH_SHORT).show()
+        val dialogBinding = com.camscanner.pro.databinding.DialogPdfOptionsBinding.inflate(layoutInflater)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogBinding.root)
+            .create()
 
-            val pdfFile = withContext(Dispatchers.IO) {
-                val imagePaths = currentPages.map { it.imagePath }
-                val title = currentDoc?.title ?: "Scanned_Document"
-                PdfGenerator.generatePdf(this@DocumentDetailActivity, imagePaths, title)
-            }
-            binding.btnExportPdf.isEnabled = true
+        dialogBinding.btnCancelPdf.setOnClickListener { dialog.dismiss() }
 
-            val pdfUri = FileManager.getUriForFile(this@DocumentDetailActivity, pdfFile)
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, pdfUri)
-                putExtra(Intent.EXTRA_SUBJECT, currentDoc?.title)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        dialogBinding.btnExportSharePdf.setOnClickListener {
+            val pageSize = when {
+                dialogBinding.rbLetter.isChecked -> com.camscanner.pro.core.pdf.PageSize.US_LETTER
+                dialogBinding.rbFitImage.isChecked -> com.camscanner.pro.core.pdf.PageSize.FIT_IMAGE
+                else -> com.camscanner.pro.core.pdf.PageSize.A4
             }
-            startActivity(Intent.createChooser(shareIntent, "Share Document PDF"))
+
+            val quality = when {
+                dialogBinding.rbQualityCompact.isChecked -> com.camscanner.pro.core.pdf.PdfQuality.COMPACT
+                dialogBinding.rbQualityMedium.isChecked -> com.camscanner.pro.core.pdf.PdfQuality.MEDIUM
+                else -> com.camscanner.pro.core.pdf.PdfQuality.HIGH
+            }
+
+            val watermark = dialogBinding.etWatermark.text?.toString()?.trim()
+
+            val options = com.camscanner.pro.core.pdf.PdfOptions(
+                pageSize = pageSize,
+                quality = quality,
+                watermarkText = if (!watermark.isNullOrBlank()) watermark else null
+            )
+
+            dialog.dismiss()
+
+            lifecycleScope.launch {
+                binding.btnExportPdf.isEnabled = false
+                Toast.makeText(this@DocumentDetailActivity, "Generating PDF...", Toast.LENGTH_SHORT).show()
+
+                val pdfFile = withContext(Dispatchers.IO) {
+                    val imagePaths = currentPages.map { it.imagePath }
+                    val title = currentDoc?.title ?: "Scanned_Document"
+                    PdfGenerator.generatePdf(this@DocumentDetailActivity, imagePaths, title, options)
+                }
+                binding.btnExportPdf.isEnabled = true
+
+                val pdfUri = FileManager.getUriForFile(this@DocumentDetailActivity, pdfFile)
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_STREAM, pdfUri)
+                    putExtra(Intent.EXTRA_SUBJECT, currentDoc?.title)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(shareIntent, "Share Document PDF"))
+            }
         }
+
+        dialog.show()
     }
 
     private fun confirmDeletePage(page: PageEntity) {

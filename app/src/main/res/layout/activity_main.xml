@@ -44,6 +44,26 @@
                     android:textColor="@color/text_primary"
                     android:textSize="22sp" />
 
+                <!-- Cloud Backup Action -->
+                <ImageButton
+                    android:id="@+id/btnCloudBackup"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Cloud Backup"
+                    android:src="@drawable/ic_cloud"
+                    app:tint="@color/primary" />
+
+                <!-- Import CamScanner Scans -->
+                <ImageButton
+                    android:id="@+id/btnImport"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Import from CamScanner"
+                    android:src="@drawable/ic_import"
+                    app:tint="@color/primary" />
+
             </LinearLayout>
 
             <!-- Search Bar -->
@@ -78,6 +98,66 @@
                     android:textSize="14sp" />
 
             </LinearLayout>
+
+            <!-- Category Filter Chips -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupCategories"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipAll"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="All Docs" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipIdCard"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ID Cards" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipReceipt"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Receipts" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipContract"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Contracts" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipPersonal"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Personal" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipWork"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Work" />
+
+                </com.google.android.material.chip.ChipGroup>
+
+            </HorizontalScrollView>
 
         </LinearLayout>
 

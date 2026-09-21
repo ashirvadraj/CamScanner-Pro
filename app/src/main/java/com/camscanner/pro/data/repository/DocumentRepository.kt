@@ -19,6 +19,9 @@ class DocumentRepository(context: Context) {
 
     fun searchDocuments(query: String): Flow<List<DocumentEntity>> = docDao.searchDocumentsFlow(query)
 
+    fun filterDocuments(category: String, query: String): Flow<List<DocumentEntity>> =
+        docDao.filterDocumentsFlow(category, query)
+
     fun getPagesForDocument(docId: Long): Flow<List<PageEntity>> = pageDao.getPagesForDocumentFlow(docId)
 
     suspend fun getDocumentById(id: Long): DocumentEntity? = withContext(Dispatchers.IO) {
@@ -30,7 +33,8 @@ class DocumentRepository(context: Context) {
         processedImagePath: String,
         originalImagePath: String,
         filterType: String,
-        ocrText: String? = null
+        ocrText: String? = null,
+        category: String = "ALL"
     ): Long = withContext(Dispatchers.IO) {
         val snippet = ocrText?.take(120)
         val doc = DocumentEntity(
@@ -39,7 +43,8 @@ class DocumentRepository(context: Context) {
             updatedAt = System.currentTimeMillis(),
             pageCount = 1,
             thumbnailPath = processedImagePath,
-            ocrSnippet = snippet
+            ocrSnippet = snippet,
+            category = category
         )
         val docId = docDao.insertDocument(doc)
 
@@ -96,6 +101,24 @@ class DocumentRepository(context: Context) {
         val doc = docDao.getDocumentById(docId)
         if (doc != null) {
             docDao.updateDocument(doc.copy(title = newTitle, updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    suspend fun updateDocumentCategory(docId: Long, category: String) = withContext(Dispatchers.IO) {
+        val doc = docDao.getDocumentById(docId)
+        if (doc != null) {
+            docDao.updateDocument(doc.copy(category = category, updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    suspend fun updatePageImage(pageId: Long, newImagePath: String) = withContext(Dispatchers.IO) {
+        val page = pageDao.getPageById(pageId)
+        if (page != null) {
+            pageDao.updatePage(page.copy(imagePath = newImagePath))
+            val doc = docDao.getDocumentById(page.documentId)
+            if (doc != null && page.pageIndex == 0) {
+                docDao.updateDocument(doc.copy(thumbnailPath = newImagePath, updatedAt = System.currentTimeMillis()))
+            }
         }
     }
 
